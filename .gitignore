@@ -8,6 +8,12 @@ venv/
 .venv/
 env/
 
+# Banco local da aplicação
+storage/
+*.db
+*.sqlite
+*.sqlite3
+
 # IDE
 .vscode/
 .idea/

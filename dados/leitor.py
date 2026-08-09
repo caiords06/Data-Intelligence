@@ -1,55 +1,161 @@
+"""Leitura, validação e consolidação de planilhas."""
+
+from __future__ import annotations
+
 from pathlib import Path
+
 import pandas as pd
 
-EXTENSOES_PERMITIDAS = {
-    '.xlsx',
-    '.xls',
-    '.csv'
-}
+from dados.periodos import identificar_periodo
 
-def validar_arquivo(caminho):
+EXTENSOES_PERMITIDAS = {".xlsx", ".xls", ".csv"}
+COLUNAS_ORIGEM = (
+    "arquivo_origem",
+    "periodo_origem",
+    "ano_origem",
+    "mes_origem",
+    "trimestre_origem",
+    "semestre_origem",
+)
+
+
+def validar_arquivo(caminho: str | Path) -> Path:
     caminho = Path(caminho)
 
     if not caminho.exists():
-        raise FileNotFoundError(
-            f'Arquivo não encontrado: {caminho}'
-        )
-    
+        raise FileNotFoundError(f"Arquivo não encontrado: {caminho}")
     if not caminho.is_file():
-        raise ValueError(
-            'O caminho informado não corresponde a um arquivo.'
-        )
+        raise ValueError("O caminho informado não corresponde a um arquivo.")
+    if caminho.suffix.lower() not in EXTENSOES_PERMITIDAS:
+        raise ValueError("Formato não suportado. Utilize XLSX, XLS ou CSV.")
 
+    return caminho
+
+
+def _carregar_csv(caminho: Path) -> pd.DataFrame:
+    ultimo_erro: Exception | None = None
+    for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            # sep=None permite detectar vírgula, ponto-e-vírgula e tabulação.
+            return pd.read_csv(
+                caminho,
+                sep=None,
+                engine="python",
+                encoding=encoding,
+            )
+        except UnicodeDecodeError as erro:
+            ultimo_erro = erro
+
+    if ultimo_erro:
+        raise ultimo_erro
+    raise ValueError(f"Não foi possível ler o CSV: {caminho}")
+
+
+def carregar_planilha(caminho: str | Path) -> pd.DataFrame:
+    caminho = validar_arquivo(caminho)
     extensao = caminho.suffix.lower()
 
-    if extensao not in EXTENSOES_PERMITIDAS:
-        raise ValueError(
-            'Formato não suportado.'
-            'Utilize XLSX, XLS ou CSV.'
+    if extensao == ".csv":
+        return _carregar_csv(caminho)
+    if extensao in {".xlsx", ".xls"}:
+        return pd.read_excel(caminho)
+
+    raise ValueError(f"Extensão não suportada: {extensao}")
+
+
+def carregar_multiplas_planilhas(caminhos) -> list[dict]:
+    caminhos = list(caminhos or [])
+    if not caminhos:
+        raise ValueError("Nenhum arquivo foi selecionado.")
+
+    resultados = []
+    for caminho in caminhos:
+        caminho_path = validar_arquivo(caminho)
+        df = carregar_planilha(caminho_path)
+        resultados.append(
+            {
+                "caminho": str(caminho_path),
+                "nome_arquivo": caminho_path.name,
+                "dataframe": df,
+                "periodo": identificar_periodo(df, caminho_path.name),
+            }
         )
 
-    return True
+    return resultados
 
-def carregar_planilha(caminho):
-    caminho= Path(caminho)
-    validar_arquivo(caminho)
-    extensao = caminho.suffix.lower()
 
-    if extensao == '.csv':
+def verificar_compatibilidade(resultados: list[dict]) -> dict:
+    if not resultados:
+        raise ValueError("Nenhum arquivo foi carregado.")
 
-        df = pd.read_csv(
-            caminho
-        )
+    colunas_referencia = list(resultados[0]["dataframe"].columns)
+    conjunto_referencia = set(colunas_referencia)
+    incompatibilidades = []
 
-    elif extensao in {'.xlsx', '.xls'}:
+    for item in resultados[1:]:
+        colunas_atual = list(item["dataframe"].columns)
+        conjunto_atual = set(colunas_atual)
 
-        df = pd.read_excel(
-            caminho
-        )
+        if conjunto_atual != conjunto_referencia:
+            incompatibilidades.append(
+                {
+                    "arquivo": item["nome_arquivo"],
+                    "colunas": colunas_atual,
+                    "faltando": sorted(conjunto_referencia - conjunto_atual),
+                    "extras": sorted(conjunto_atual - conjunto_referencia),
+                }
+            )
 
-    else:
-        raise ValueError(
-            f'Extensão não suportada: {extensao}'
-        )
+    return {
+        "compativel": not incompatibilidades,
+        "colunas_referencia": colunas_referencia,
+        "incompatibilidades": incompatibilidades,
+    }
 
+
+def _adicionar_colunas_periodo(df: pd.DataFrame, item: dict) -> pd.DataFrame:
+    df = df.copy()
+    periodo = item.get("periodo") or {}
+    df["arquivo_origem"] = item["nome_arquivo"]
+
+    if periodo.get("origem_identificacao") == "coluna_data":
+        coluna_data = periodo.get("coluna_data")
+        if coluna_data in df.columns:
+            datas = pd.to_datetime(df[coluna_data], errors="coerce", dayfirst=True)
+            df["periodo_origem"] = datas.dt.strftime("%m/%Y")
+            df["ano_origem"] = datas.dt.year.astype("Int64")
+            df["mes_origem"] = datas.dt.month.astype("Int64")
+            df["trimestre_origem"] = datas.dt.quarter.map(
+                lambda valor: f"T{valor}" if pd.notna(valor) else None
+            )
+            df["semestre_origem"] = datas.dt.month.map(
+                lambda mes: f"S{1 if mes <= 6 else 2}" if pd.notna(mes) else None
+            )
+            return df
+
+    df["periodo_origem"] = periodo.get("periodo")
+    df["ano_origem"] = periodo.get("ano")
+    df["mes_origem"] = periodo.get("mes")
+    df["trimestre_origem"] = periodo.get("trimestre")
+    df["semestre_origem"] = periodo.get("semestre")
     return df
+
+
+def consolidar_planilhas(resultados: list[dict]) -> pd.DataFrame:
+    if not resultados:
+        raise ValueError("Nenhum arquivo disponível para consolidação.")
+
+    compatibilidade = verificar_compatibilidade(resultados)
+    if not compatibilidade["compativel"]:
+        raise ValueError("Não é possível consolidar arquivos incompatíveis.")
+
+    ordem_colunas = compatibilidade["colunas_referencia"]
+    tabelas = []
+
+    for item in resultados:
+        df = item["dataframe"].copy()
+        # Arquivos com as mesmas colunas em ordem diferente são alinhados.
+        df = df.reindex(columns=ordem_colunas)
+        tabelas.append(_adicionar_colunas_periodo(df, item))
+
+    return pd.concat(tabelas, ignore_index=True)

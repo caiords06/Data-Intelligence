@@ -1,153 +1,77 @@
+"""Análise descritiva genérica de DataFrames."""
+
+from __future__ import annotations
+
 import pandas as pd
-import numpy as np
 
 
-def analisar_planilha(df):
+def analisar_planilha(df: pd.DataFrame) -> dict:
+    """Retorna informações estruturais e estatísticas básicas da planilha.
 
-    resultado = {}
+    A função não altera o DataFrame recebido e serve como base para módulos
+    universais, independentemente da categoria de negócio da planilha.
+    """
+    if df is None:
+        raise ValueError("DataFrame não informado para análise.")
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("A análise exige um pandas.DataFrame.")
 
-    # =========================================================
-    # INFORMAÇÕES BÁSICAS
-    # =========================================================
+    colunas = list(df.columns)
+    tipos = {coluna: str(df[coluna].dtype) for coluna in colunas}
+    valores_ausentes = {
+        coluna: int(df[coluna].isna().sum())
+        for coluna in colunas
+    }
 
-    resultado["total_registros"] = len(df)
+    colunas_numericas = list(df.select_dtypes(include="number").columns)
+    colunas_texto = list(df.select_dtypes(include=["object", "string"]).columns)
 
-    resultado["total_colunas"] = len(df.columns)
-
-    resultado["colunas"] = list(df.columns)
-
-    # =========================================================
-    # TIPOS DAS COLUNAS
-    # =========================================================
-
-    tipos = {}
-
-    for coluna in df.columns:
-
-        tipos[coluna] = str(
-            df[coluna].dtype
+    colunas_data = [
+        coluna
+        for coluna in colunas
+        if pd.api.types.is_datetime64_any_dtype(df[coluna])
+        or any(
+            termo in str(coluna).lower()
+            for termo in ("data", "date", "dia", "mês", "mes")
         )
+    ]
 
-    resultado["tipos"] = tipos
-
-    # =========================================================
-    # VALORES AUSENTES
-    # =========================================================
-
-    valores_ausentes = {}
-
-    for coluna in df.columns:
-
-        quantidade = int(
-            df[coluna].isna().sum()
-        )
-
-        valores_ausentes[coluna] = quantidade
-
-    resultado["valores_ausentes"] = valores_ausentes
-
-    resultado["total_valores_ausentes"] = sum(
-        valores_ausentes.values()
-    )
-
-    # =========================================================
-    # DUPLICIDADES
-    # =========================================================
-
-    resultado["linhas_duplicadas"] = int(
-        df.duplicated().sum()
-    )
-
-    # =========================================================
-    # COLUNAS NUMÉRICAS
-    # =========================================================
-
-    colunas_numericas = list(
-        df.select_dtypes(
-            include=np.number
-        ).columns
-    )
-
-    resultado["colunas_numericas"] = (
-        colunas_numericas
-    )
-
-    # =========================================================
-    # COLUNAS DE TEXTO
-    # =========================================================
-
-    colunas_texto = list(
-        df.select_dtypes(
-            include=["object", "string"]
-        ).columns
-    )
-
-    resultado["colunas_texto"] = colunas_texto
-
-    # =========================================================
-    # COLUNAS DE DATA
-    # =========================================================
-
-    colunas_data = []
-
-    for coluna in df.columns:
-
-        nome = str(coluna).lower()
-
-        if any(
-            palavra in nome
-            for palavra in [
-                "data",
-                "date",
-                "dia",
-                "mês",
-                "mes"
-            ]
-        ):
-
-            colunas_data.append(
-                coluna
-            )
-
-    resultado["colunas_data"] = colunas_data
-
-    # =========================================================
-    # ESTATÍSTICAS NUMÉRICAS
-    # =========================================================
-
-    estatisticas = {}
-
+    estatisticas: dict = {}
     for coluna in colunas_numericas:
+        serie = pd.to_numeric(df[coluna], errors="coerce")
+        valores_validos = serie.dropna()
 
-        serie = pd.to_numeric(
-            df[coluna],
-            errors="coerce"
-        )
+        if valores_validos.empty:
+            estatisticas[coluna] = {
+                "soma": 0.0,
+                "media": 0.0,
+                "mediana": 0.0,
+                "minimo": 0.0,
+                "maximo": 0.0,
+                "desvio_padrao": 0.0,
+            }
+            continue
 
+        desvio = valores_validos.std()
         estatisticas[coluna] = {
-
-            "soma": float(
-                serie.sum()
-            ),
-
-            "media": float(
-                serie.mean()
-            ) if serie.notna().any() else 0,
-
-            "mediana": float(
-                serie.median()
-            ) if serie.notna().any() else 0,
-
-            "minimo": float(
-                serie.min()
-            ) if serie.notna().any() else 0,
-
-            "maximo": float(
-                serie.max()
-            ) if serie.notna().any() else 0,
-
+            "soma": float(valores_validos.sum()),
+            "media": float(valores_validos.mean()),
+            "mediana": float(valores_validos.median()),
+            "minimo": float(valores_validos.min()),
+            "maximo": float(valores_validos.max()),
+            "desvio_padrao": float(desvio) if pd.notna(desvio) else 0.0,
         }
 
-    resultado["estatisticas"] = estatisticas
-
-    return resultado
+    return {
+        "total_registros": int(len(df)),
+        "total_colunas": int(len(colunas)),
+        "colunas": colunas,
+        "tipos": tipos,
+        "valores_ausentes": valores_ausentes,
+        "total_valores_ausentes": int(sum(valores_ausentes.values())),
+        "linhas_duplicadas": int(df.duplicated().sum()),
+        "colunas_numericas": colunas_numericas,
+        "colunas_texto": colunas_texto,
+        "colunas_data": colunas_data,
+        "estatisticas": estatisticas,
+    }

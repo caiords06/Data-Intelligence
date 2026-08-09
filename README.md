@@ -6,7 +6,7 @@
 
 Plataforma desenvolvida em Python para transformar planilhas e outras fontes de dados em **informações estruturadas, indicadores, análises, insights, dashboards e relatórios gerenciais**.
 
-[![Status](https://img.shields.io/badge/status-V2%20em%20desenvolvimento-orange)](https://github.com/)
+[![Status](https://img.shields.io/badge/status-V3%20em%20desenvolvimento-orange)](https://github.com/)
 [![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Git](https://img.shields.io/badge/Git-Version%20Control-F05032?logo=git&logoColor=white)](https://git-scm.com/)
@@ -76,35 +76,31 @@ O projeto nasce como uma automação de planilhas e evolui para uma plataforma d
 
 ## 🚧 Status atual
 
-> **Versão atual: V2 — Data Engine**
+> **Versão atual: V3 — Qualidade, estrutura e organização do motor**
 
-A primeira versão já estabeleceu a infraestrutura inicial da aplicação.
+As fundações da V1 e o núcleo do Data Engine da V2 estão operacionais. A aplicação já possui autenticação local, seleção de múltiplos arquivos, consolidação, classificação, indicadores de vendas e análise temporal.
 
-### ✅ Implementado na V1
+### ✅ Consolidado até a V2
 
-- interface gráfica inicial;
-- sistema de logs;
-- execução da aplicação;
-- identificação do sistema operacional;
-- identificação do navegador;
-- automação do navegador;
-- seleção de arquivo local;
-- leitura de planilhas;
-- identificação da quantidade de registros;
-- identificação da quantidade de colunas;
-- exibição das informações no log.
-
-### 🔨 Em desenvolvimento na V2
-
-A V2 expande o projeto para um motor de dados capaz de trabalhar com:
-
-- múltiplos arquivos;
+- interface gráfica e autenticação local;
+- múltiplos arquivos XLSX, XLS e CSV;
 - validação de compatibilidade;
-- consolidação;
-- identificação de categoria;
-- preservação da origem dos registros;
-- períodos de análise;
-- comparação temporal.
+- consolidação com preservação da origem;
+- identificação de períodos;
+- classificação automática e categoria definida pelo usuário;
+- indicadores específicos de vendas;
+- análise mensal, trimestral, semestral e anual;
+- módulos analíticos configuráveis pela interface.
+
+### 🔨 Em desenvolvimento na V3
+
+- análise estrutural universal;
+- diagnóstico de valores ausentes, vazios e duplicidades;
+- score de qualidade da base;
+- motor analítico desacoplado da interface por um orquestrador;
+- processamento de planilhas em thread separada da interface;
+- preparação do dashboard adaptativo por categoria;
+- próximos tratamentos: tipos inválidos, datas problemáticas, normalização e outliers.
 
 ---
 
@@ -917,7 +913,7 @@ Tecnologias utilizadas ou previstas no projeto:
 
 ## 📁 Estrutura do projeto
 
-A arquitetura é planejada de forma modular:
+Estrutura atual da V3:
 
 ```text
 automacao-planilhas/
@@ -925,52 +921,57 @@ automacao-planilhas/
 ├── main.py
 ├── requirements.txt
 ├── README.md
-├── .gitignore
+├── RELATORIO_OTIMIZACAO.md
+│
+├── core/
+│   └── orquestrador.py
 │
 ├── interface/
 │   ├── app.py
-│   ├── telas/
-│   └── componentes/
+│   ├── login.py
+│   ├── nova_analise.py
+│   ├── primeiro_acesso.py
+│   ├── principal.py
+│   ├── tema.py
+│   └── usuarios.py
 │
 ├── dados/
-│   ├── leitor.py
-│   ├── validador.py
-│   ├── tratamento.py
-│   ├── consolidacao.py
-│   ├── periodos.py
-│   ├── estatistica.py
-│   ├── indicadores.py
-│   ├── anomalias.py
-│   └── comparacao.py
-│
-├── ia/
-│   ├── cliente.py
+│   ├── analisador.py
 │   ├── classificador.py
-│   ├── interpretador.py
-│   └── prompts.py
+│   ├── estrutural.py
+│   ├── indicadores.py
+│   ├── leitor.py
+│   ├── periodos.py
+│   └── qualidade.py
 │
-├── fontes/
-│   ├── local.py
-│   ├── google_drive.py
-│   └── url.py
+├── analysis/
+│   └── temporal.py
 │
-├── relatorios/
-│   ├── pdf.py
-│   ├── excel.py
-│   ├── dashboard.py
-│   └── powerbi.py
+├── auth/
+│   ├── autenticacao.py
+│   ├── banco.py
+│   ├── seguranca.py
+│   └── sessao.py
 │
-├── email/
-│   ├── gmail.py
-│   └── outlook.py
+├── automacao/
+│   └── driver.py
 │
-├── historico/
-│   └── banco.py
+├── sistema/
+│   ├── idbrowser.py
+│   ├── iduser.py
+│   └── opsystemcheck.py
 │
-└── configuracoes/
+├── configuracoes/
+│   └── settings.py
+│
+├── dados_exemplo/
+├── storage/
+└── tests/
+    ├── test_auth.py
+    └── test_data_engine.py
 ```
 
-> A estrutura poderá sofrer alterações durante o desenvolvimento.
+Módulos de IA, fontes remotas, relatórios, e-mail e histórico continuam previstos para versões futuras.
 
 ---
 
@@ -1018,47 +1019,47 @@ A separação entre interface, fontes, processamento, análise, IA, relatórios 
 - [x] Identificação de colunas
 - [x] Exibição das informações no log
 
-### 🚧 V2 — Data Engine
+### ✅ V2 — Data Engine
 
 #### Entrada e consolidação
 
-- [ ] Selecionar múltiplos arquivos
-- [ ] Adicionar arquivos pela interface
-- [ ] Remover arquivos pela interface
-- [ ] Validar compatibilidade entre arquivos
-- [ ] Identificar categoria
-- [ ] Consolidar arquivos
-- [ ] Preservar arquivo de origem
-- [ ] Preservar período de origem
-- [ ] Suportar múltiplos períodos
+- [x] Selecionar múltiplos arquivos
+- [x] Adicionar arquivos pela interface
+- [x] Remover arquivos pela interface
+- [x] Validar compatibilidade entre arquivos
+- [x] Identificar categoria
+- [x] Consolidar arquivos
+- [x] Preservar arquivo de origem
+- [x] Preservar período de origem
+- [x] Suportar múltiplos períodos
 
 #### Períodos
 
-- [ ] Análise mensal
-- [ ] Análise trimestral
-- [ ] Análise semestral
-- [ ] Análise anual
+- [x] Análise mensal
+- [x] Análise trimestral
+- [x] Análise semestral
+- [x] Análise anual
 - [ ] Período personalizado
-- [ ] Comparação entre períodos
+- [x] Comparação entre períodos
 
-### ⏳ V3 — Qualidade e tratamento
+### 🚧 V3 — Qualidade e tratamento
 
-- [ ] Detecção de valores ausentes
-- [ ] Detecção de duplicidades
+- [x] Detecção de valores ausentes
+- [x] Detecção de duplicidades
 - [ ] Validação de tipos
 - [ ] Tratamento de datas
 - [ ] Tratamento numérico
 - [ ] Normalização de colunas
 - [ ] Detecção de inconsistências
-- [ ] Score de qualidade da base
-- [ ] Relatório de qualidade
+- [x] Score de qualidade da base
+- [x] Relatório de qualidade
 
 ### ⏳ V4 — Motor analítico
 
-- [ ] Estatísticas descritivas
+- [x] Estatísticas descritivas
 - [ ] Indicadores universais
 - [ ] Indicadores específicos por categoria
-- [ ] Rankings
+- [x] Rankings
 - [ ] Participação percentual
 - [ ] Crescimento e queda
 - [ ] Comparações
