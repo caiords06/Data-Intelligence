@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Ambiente virtual
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Variáveis de ambiente
+.env
+.env.*
+
+# Credenciais
+credentials.json
+token.json
+secrets.json
+
+# Arquivos locais de dados
+*.xlsx
+*.xls
+*.csv
+
+# Logs
+*.log
+logs/
+
+# Temporários
+temp/
+tmp/
+
+# Selenium
+screenshots/
+
+# Sistema
+.DS_Store
+Thumbs.db
