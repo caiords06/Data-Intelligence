@@ -8,6 +8,7 @@ import traceback
 from Assertions.opsystemcheck import verificar_sistema_operacional
 from Assertions.iduser import identificar_usuario
 import queue
+from dados.analisador import analisar_planilha
 from dados.leitor import carregar_planilha
 
 from Assertions.idbrowser import(
@@ -35,7 +36,8 @@ class AplicacaoAutomacao:
                 self.root = root
 
                 self.fila_log = queue.Queue()
-
+                self.arquivo_selecionado = None
+                self.resultado_analise = None
                 self.root.title(
                         'Automação de Análise de Dados'
                 )
@@ -146,6 +148,31 @@ class AplicacaoAutomacao:
                 self.combo_origem.pack(
                         fill='x',
                         pady=(5, 20)
+                )
+
+                self.frame_arquivo = ttk.Frame(
+                        configuracoes
+                )
+                self.frame_arquivo.pack(
+                        fill='x',
+                        pady=(0, 20)
+                )
+                self.botao_arquivo = ttk.Button(
+                        self.frame_arquivo,
+                        text='Selecionar arquivo',
+                        command=self.selecionar_arquivo
+                )
+                self.botao_arquivo.pack(
+                        fill='x'
+                )
+                self.label_arquivo = ttk.Label(
+                        self.frame_arquivo,
+                        text='Nenhum arquivo selecionado.',
+                        wraplength=250
+                )
+                self.label_arquivo.pack(
+                        anchor='w',
+                        pady=(5, 0)
                 )
 
                 # ------------------------------------------
@@ -792,6 +819,192 @@ class AplicacaoAutomacao:
                         )
                 )
 
+        def selecionar_arquivo(self):
+                caminho = filedialog.askopenfilename(
+                        title='Selecionar planilha',
+                        filetypes=[
+                        (
+                                "Planilhas",
+                                "*.xlsx *.xls *.csv"
+                        ),
+                        (
+                                "Excel",
+                                "*.xlsx *.xls"
+                        ),
+                        (
+                                "CSV",
+                                "*.csv"
+                        ),
+                        (
+                                "Todos os arquivos",
+                                "*.*"
+                        )
+                        ]
+                )
+                if not caminho:
+                        return
+                try:
+
+
+                        self.adicionar_log(
+                        'Arquivo selecionado.'
+                        )
+
+                        self.adicionar_log(
+                                f'Arquivo: {caminho}'
+                        )
+
+                        caminho = str(caminho)
+
+                        df = carregar_planilha(
+                                caminho
+                        )
+                        self.adicionar_log(
+                        "[OK] Iniciando análise dos dados..."
+                        )
+
+                        resultado = analisar_planilha(
+                                df
+                        )
+
+                        self.resultado_analise = resultado
+
+                        self.adicionar_log(
+                        "========================================"
+                        )
+
+                        self.adicionar_log(
+                        "ANÁLISE INICIAL DA PLANILHA"
+                        )
+
+                        self.adicionar_log(
+                        "========================================"
+                        )
+
+                        self.adicionar_log(
+                        f"Registros: "
+                        f"{resultado['total_registros']:,}".replace(
+                                ",",
+                                "."
+                        )
+                        )
+
+                        self.adicionar_log(
+                        f"Colunas: "
+                        f"{resultado['total_colunas']}"
+                        )
+
+                        self.adicionar_log(
+                        f"Duplicidades: "
+                        f"{resultado['linhas_duplicadas']}"
+                        )
+
+                        self.adicionar_log(
+                        f"Valores ausentes: "
+                        f"{resultado['total_valores_ausentes']}"
+                        )
+
+                        self.arquivo_selecionado = caminho
+
+                        nome_arquivo = caminho.split('\\')[-1]
+
+                        self.label_arquivo.configure(
+                        text=f'Arquivo: {nome_arquivo}'
+                        )
+
+                        self.adicionar_log(
+                                f'[OK] Registros: {len(df):,}'.replace(
+                                ",",
+                                '.'
+                        )
+                        )
+                        self.adicionar_log(
+                                f'[OK] Colunas: {len(df.columns)}'
+                        )
+
+                        self.adicionar_log(
+                        "[OK] Colunas identificadas:"
+                        )
+
+                        for coluna in df.columns:
+
+                                self.adicionar_log(
+                                        f"    • {coluna}"
+                                )
+
+                                self.status.set(
+                                        "Planilha carregada com sucesso."
+                                )
+                        self.adicionar_log(
+                        "TIPOS DE DADOS:"
+                        )
+
+                        for coluna, tipo in resultado["tipos"].items():
+
+                                self.adicionar_log(
+                                        f"    • {coluna} → {tipo}"
+                                )
+
+                        self.adicionar_log(
+                        "COLUNAS NUMÉRICAS:"
+                        )
+
+                        for coluna in resultado[
+                        "colunas_numericas"
+                        ]:
+
+                                self.adicionar_log(
+                                f"    • {coluna}"
+                        )
+
+                        self.adicionar_log(
+                        "ESTATÍSTICAS NUMÉRICAS:"
+                        )
+
+                        for coluna, dados in resultado[
+                        "estatisticas"
+                        ].items():
+
+                                self.adicionar_log(
+                                        f"    • {coluna}"
+                                )
+
+                                self.adicionar_log(
+                                        f"      Soma: {dados['soma']:,.2f}"
+                                )
+
+                                self.adicionar_log(
+                                        f"      Média: {dados['media']:,.2f}"
+                                )
+
+                                self.adicionar_log(
+                                        f"      Mediana: {dados['mediana']:,.2f}"
+                                )
+
+                                self.adicionar_log(
+                                        f"      Mínimo: {dados['minimo']:,.2f}"
+                                )
+
+                                self.adicionar_log(
+                                        f"      Máximo: {dados['maximo']:,.2f}"
+                                )
+
+                except Exception as erro:
+
+                        self.adicionar_log(
+                        "[ERRO AO CARREGAR PLANILHA]"
+                        )
+
+                        self.adicionar_log(
+                        str(erro)
+                        )
+
+                        self.status.set(
+                        "Erro ao carregar planilha."
+                        )
+                        
+                                                     
+                                                     
 
 # ==============================================================
 # EXECUÇÃO
