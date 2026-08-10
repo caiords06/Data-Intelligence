@@ -6,15 +6,18 @@ from auth.sessao import SESSAO
 
 class TelaLogin:
 
-    def __init__(self, root, ao_entrar):
+    def __init__(self, root, ao_entrar, mensagem_inicial=None):
         self.root = root
         self.ao_entrar = ao_entrar
 
         self.cores = CORES
+        self.mensagem_inicial = mensagem_inicial
 
         self.criar_interface()
 
     def criar_interface(self):
+
+        self.root.title("Data Intelligence · Acesso corporativo · V7")
 
         self.container = tk.Frame(
             self.root,
@@ -110,7 +113,7 @@ class TelaLogin:
 
         tk.Label(
             conteudo_marca,
-            text="Transforme dados\nem decisões.",
+            text="Operações conectadas.\nDecisões inteligentes.",
             font=("Segoe UI", 26, "bold"),
             fg=self.cores["text"],
             bg=self.cores["sidebar"],
@@ -122,8 +125,8 @@ class TelaLogin:
         tk.Label(
             conteudo_marca,
             text=(
-                "Automação, análise e inteligência "
-                "para dados empresariais."
+                "Uma plataforma empresarial modular para dados, processos, "
+                "aprovações, automações e inteligência operacional."
             ),
             font=("Segoe UI", 10),
             fg=self.cores["text_sec"],
@@ -137,7 +140,7 @@ class TelaLogin:
 
         tk.Label(
             conteudo_marca,
-            text="ANÁLISE  •  AUTOMAÇÃO  •  INTELIGÊNCIA",
+            text="ERP MODULAR  •  ANALYTICS  •  AUTOMAÇÃO",
             font=("Segoe UI", 8, "bold"),
             fg=self.cores["text_muted"],
             bg=self.cores["sidebar"]
@@ -258,9 +261,15 @@ class TelaLogin:
             padx=40
         )
 
+        if self.mensagem_inicial:
+            self.label_status.configure(
+                text=self.mensagem_inicial,
+                fg=self.cores["warning"],
+            )
+
         tk.Label(
             card,
-            text="Data Intelligence Platform",
+            text="Data Intelligence · Enterprise Platform · V7",
             font=("Segoe UI", 8),
             fg=self.cores["text_muted"],
             bg=self.cores["card"]
@@ -314,8 +323,14 @@ class TelaLogin:
                 fill="x"
             )
 
-            entry = tk.Entry(
+            entrada_interior = tk.Frame(
                 entrada_frame,
+                bg=self.cores["input"],
+            )
+            entrada_interior.pack(fill="x", padx=1, pady=1)
+
+            entry = tk.Entry(
+                entrada_interior,
                 font=("Segoe UI", 11),
                 bg=self.cores["input"],
                 fg=self.cores["text"],
@@ -327,9 +342,17 @@ class TelaLogin:
 
             entry.pack(
                 fill="x",
-                padx=1,
-                pady=1,
+                padx=(10, 6),
                 ipady=9
+            )
+
+            entry.bind(
+                "<FocusIn>",
+                lambda _evento: entrada_frame.configure(bg=self.cores["primary"]),
+            )
+            entry.bind(
+                "<FocusOut>",
+                lambda _evento: entrada_frame.configure(bg=self.cores["border"]),
             )
 
             return entry
@@ -376,4 +399,5 @@ class TelaLogin:
         self.ao_entrar()
 
     def destruir(self):
+            self.root.unbind("<Return>")
             self.container.destroy()

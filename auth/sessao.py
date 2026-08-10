@@ -1,15 +1,44 @@
-"""Estado da sessão autenticada em memória."""
+"""Estado e tempo de atividade da sessão autenticada em memória."""
+
+from datetime import datetime, timedelta, timezone
 
 
 class Sessao:
     def __init__(self):
         self.usuario = None
+        self.iniciada_em = None
+        self.ultima_atividade = None
+        self.empresa_id = None
+        self.filial_id = None
 
     def iniciar(self, usuario):
+        agora = datetime.now(timezone.utc)
         self.usuario = usuario
+        self.iniciada_em = agora
+        self.ultima_atividade = agora
+        self.empresa_id = None
+        self.filial_id = None
+
+    def definir_contexto_empresarial(self, empresa_id, filial_id=None):
+        self.empresa_id = int(empresa_id) if empresa_id is not None else None
+        self.filial_id = int(filial_id) if filial_id is not None else None
+
+    def registrar_atividade(self):
+        if self.usuario is not None:
+            self.ultima_atividade = datetime.now(timezone.utc)
+
+    def expirada(self, minutos: int = 30) -> bool:
+        if self.usuario is None or self.ultima_atividade is None:
+            return False
+        limite = datetime.now(timezone.utc) - timedelta(minutes=max(1, minutos))
+        return self.ultima_atividade < limite
 
     def encerrar(self):
         self.usuario = None
+        self.iniciada_em = None
+        self.ultima_atividade = None
+        self.empresa_id = None
+        self.filial_id = None
 
     def autenticado(self):
         return self.usuario is not None

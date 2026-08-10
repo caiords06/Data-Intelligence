@@ -28,7 +28,15 @@ def _identificar_coluna_valor(
     campos: dict,
 ) -> tuple[object | None, str | None]:
     mapa = criar_mapa_campos(campos)
-    for campo in ("valor", "salario", "custo", "quantidade"):
+    for campo in (
+        "valor",
+        "receita",
+        "despesa",
+        "saldo_financeiro",
+        "salario",
+        "custo",
+        "quantidade",
+    ):
         coluna = mapa.get(campo)
         if coluna in df.columns:
             return coluna, campo
@@ -108,7 +116,16 @@ def analisar_periodos(
 
     resultado["metrica"] = campo_metrica
     resultado["formato"] = (
-        "moeda" if campo_metrica in {"valor", "salario", "custo"} else "numero"
+        "moeda"
+        if campo_metrica in {
+            "valor",
+            "receita",
+            "despesa",
+            "saldo_financeiro",
+            "salario",
+            "custo",
+        }
+        else "numero"
     )
 
     dados = pd.DataFrame(

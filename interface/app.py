@@ -1,29 +1,50 @@
 import queue
 import threading
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from automacao.driver import criar_driver
+from auth.sessao import SESSAO
 from configuracoes.settings import (
-    LINK,
     TEMPO_ABERTURA_NAVEGADOR,
     TEMPO_CARREGAMENTO_PAGINA,
+    obter_link_validacao,
 )
 from core.orquestrador import OrquestradorAnalise, normalizar_configuracao
+from enterprise.central import registrar_atividade_analytics
+from enterprise.jobs import (
+        atualizar_job,
+        concluir_job,
+        criar_job,
+        falhar_job,
+        iniciar_job,
+)
+from historico.repositorio import registrar_analise
 from sistema.idbrowser import identificar_tipo_navegador, localizar_navegador_padrao
 from sistema.iduser import identificar_usuario
 from sistema.opsystemcheck import verificar_sistema_operacional
+from interface.tema import CORES, LAYOUT
 
 
 class AplicacaoAutomacao:
 
-        def __init__(self, root, arquivos_iniciais=None, configuracao_analise=None):
+        def __init__(
+                self,
+                root,
+                arquivos_iniciais=None,
+                configuracao_analise=None,
+                navegacao=None,
+                dataframe_inicial=None,
+                nome_fonte_empresarial="Módulo empresarial",
+        ):
                 self.root = root
+                self.navegacao = navegacao or {}
                 self.configuracao_analise = normalizar_configuracao(configuracao_analise)
                 self.modulos_analise = self.configuracao_analise["modulos"]
                 self.categoria_solicitada = self.configuracao_analise["categoria"]
@@ -42,15 +63,33 @@ class AplicacaoAutomacao:
                 self.analise_estrutural = None
                 self.analise_qualidade = None
                 self.analise_temporal = None
+                self.relatorio_tratamento = None
                 self.driver_selenium = None
                 self.processando = False
+                self.after_logs_id = None
+                self.categoria_atual = "desconhecida"
+                self.dashboard_config = {}
+                self.job_id = None
+                self.dataframe_inicial = dataframe_inicial
+                self.nome_fonte_empresarial = nome_fonte_empresarial
 
-                self.root.title("Automação de Análise de Dados")
-                self.root.geometry("1100x700")
-                self.root.minsize(950, 600)
+                self.root.title("Data Intelligence · Dashboard analítico · V7")
+                self.root.geometry("1440x900")
+                self.root.minsize(1180, 740)
 
                 self.criar_interface()
                 self.processar_logs()
+                self.root.protocol("WM_DELETE_WINDOW", self.encerrar_aplicacao)
+
+                if self.dataframe_inicial is not None:
+                        self.root.after(
+                                300,
+                                lambda: self.carregar_dataframe_empresarial(
+                                        self.dataframe_inicial,
+                                        self.nome_fonte_empresarial,
+                                ),
+                        )
+                        return
 
                 arquivos_configurados = self.configuracao_analise.get("arquivos", [])
                 caminhos_iniciais = arquivos_configurados or list(arquivos_iniciais or [])
@@ -71,36 +110,24 @@ class AplicacaoAutomacao:
                 # TEMA / CORES
                 # ==========================================================
 
-                self.cores = {
-                        "bg": "#0F172A",
-                        "sidebar": "#111827",
-                        "card": "#1E293B",
-                        "card_hover": "#263449",
-                        "border": "#334155",
-                        "text": "#F8FAFC",
-                        "text_sec": "#94A3B8",
-                        "primary": "#38BDF8",
-                        "success": "#22C55E",
-                        "warning": "#F59E0B",
-                        "danger": "#EF4444",
-                        "terminal": "#0B1120"
-                }
+                self.cores = dict(CORES)
+                self.cores["terminal"] = CORES["input"]
 
                 self.root.configure(
                         bg=self.cores["bg"]
                 )
 
                 self.root.title(
-                        "Data Analytics Automation"
+                        "Data Intelligence · Dashboard analítico"
                 )
 
                 self.root.geometry(
-                        "1200x760"
+                        "1440x900"
                 )
 
                 self.root.minsize(
-                        1050,
-                        680
+                        1180,
+                        740
                 )
 
                 # ==========================================================
@@ -156,7 +183,7 @@ class AplicacaoAutomacao:
                 sidebar = tk.Frame(
                         container,
                         bg=self.cores["sidebar"],
-                        width=230
+                        width=LAYOUT["sidebar_largura"]
                 )
 
                 sidebar.pack(
@@ -179,14 +206,14 @@ class AplicacaoAutomacao:
 
                 logo_area.pack(
                         fill="x",
-                        padx=20,
+                        padx=28,
                         pady=(25, 30)
                 )
 
                 tk.Label(
                         logo_area,
-                        text="◈",
-                        font=("Segoe UI", 26, "bold"),
+                        text="◇",
+                        font=("Segoe UI", 22, "bold"),
                         fg=self.cores["primary"],
                         bg=self.cores["sidebar"]
                 ).pack(
@@ -205,7 +232,7 @@ class AplicacaoAutomacao:
 
                 tk.Label(
                         logo_texto,
-                        text="DATA",
+                        text="Data Intelligence",
                         font=("Segoe UI", 12, "bold"),
                         fg=self.cores["text"],
                         bg=self.cores["sidebar"]
@@ -215,7 +242,7 @@ class AplicacaoAutomacao:
 
                 tk.Label(
                         logo_texto,
-                        text="AUTOMATION",
+                        text="ENTERPRISE ANALYTICS",
                         font=("Segoe UI", 8),
                         fg=self.cores["text_sec"],
                         bg=self.cores["sidebar"]
@@ -229,27 +256,81 @@ class AplicacaoAutomacao:
 
                 self.criar_menu_item(
                         sidebar,
-                        "⌂",
-                        "Dashboard"
+                        "◈",
+                        "Dashboard analítico",
+                        ativo=True,
                 )
 
                 self.criar_menu_item(
                         sidebar,
                         "▣",
-                        "Arquivos"
+                        "Explorar dados",
+                        lambda: self.mostrar_previa("Explorar dados"),
                 )
 
                 self.criar_menu_item(
                         sidebar,
-                        "◉",
-                        "Análise"
+                        "▤",
+                        "Relatórios",
+                        lambda: self.mostrar_previa("Central de relatórios"),
+                )
+
+                self.criar_menu_item(
+                        sidebar,
+                        "▥",
+                        "Visualizações",
+                        lambda: self.mostrar_previa("Galeria de visualizações"),
+                )
+
+                self.criar_menu_item(
+                        sidebar,
+                        "◇",
+                        "Modelos",
+                        lambda: self.mostrar_previa("Modelos analíticos"),
+                )
+
+                self.criar_menu_item(
+                        sidebar,
+                        "⌂",
+                        "Início",
+                        lambda: self._navegar("inicio"),
+                )
+
+                self.criar_menu_item(
+                        sidebar,
+                        "▦",
+                        "Módulos",
+                        lambda: self._navegar("modulos"),
+                )
+
+                self.criar_menu_item(
+                        sidebar,
+                        "◷",
+                        "Histórico",
+                        lambda: self._navegar("historico"),
+                )
+
+                self.criar_menu_item(
+                        sidebar,
+                        "✓",
+                        "Aprovações",
+                        lambda: self._navegar("aprovacoes"),
                 )
 
                 self.criar_menu_item(
                         sidebar,
                         "⚙",
-                        "Configurações"
+                        "Configurações",
+                        lambda: self._navegar("configuracoes"),
                 )
+
+                if SESSAO.eh_admin():
+                        self.criar_menu_item(
+                                sidebar,
+                                "♙",
+                                "Usuários",
+                                lambda: self._navegar("usuarios"),
+                        )
 
                 # ----------------------------------------------------------
                 # ESPAÇAMENTO
@@ -367,7 +448,7 @@ class AplicacaoAutomacao:
 
                 tk.Label(
                         titulo_area,
-                        text="Dashboard",
+                        text="Dashboard analítico",
                         font=("Segoe UI", 23, "bold"),
                         fg=self.cores["text"],
                         bg=self.cores["bg"]
@@ -377,7 +458,7 @@ class AplicacaoAutomacao:
 
                 tk.Label(
                         titulo_area,
-                        text="Visão geral da automação e análise de dados",
+                        text="Indicadores, qualidade, diagnósticos e logs do processamento atual.",
                         font=("Segoe UI", 10),
                         fg=self.cores["text_sec"],
                         bg=self.cores["bg"]
@@ -736,44 +817,61 @@ class AplicacaoAutomacao:
                         "Aguardando configuração da automação."
                 )
 
-        def criar_menu_item(self, parent, icone, texto):
+        def criar_menu_item(self, parent, icone, texto, comando=None, ativo=False):
+
+                fundo = self.cores["card"] if ativo else self.cores["sidebar"]
+                cor_texto = self.cores["text"] if ativo else self.cores["text_sec"]
 
                 frame = tk.Frame(
                         parent,
-                        bg=self.cores["sidebar"],
-                        cursor="hand2"
+                        bg=fundo,
+                        cursor="hand2" if comando else "arrow",
                 )
 
                 frame.pack(
                         fill="x",
-                        padx=10,
+                        padx=12,
                         pady=2
                 )
 
-                tk.Label(
+                icone_label = tk.Label(
                         frame,
                         text=icone,
                         font=("Segoe UI", 13),
-                        fg=self.cores["text_sec"],
-                        bg=self.cores["sidebar"]
-                ).pack(
+                        fg=cor_texto,
+                        bg=fundo,
+                )
+                icone_label.pack(
                         side="left",
-                        padx=(12, 10),
+                        padx=(18, 10),
                         pady=10
                 )
 
-                tk.Label(
+                texto_label = tk.Label(
                         frame,
                         text=texto,
-                        font=("Segoe UI", 10),
-                        fg=self.cores["text_sec"],
-                        bg=self.cores["sidebar"]
-                ).pack(
+                        font=("Segoe UI", 10, "bold" if ativo else "normal"),
+                        fg=cor_texto,
+                        bg=fundo,
+                )
+                texto_label.pack(
                         side="left",
                         pady=10
                 )
 
+                if comando:
+                        for widget in (frame, icone_label, texto_label):
+                                widget.bind("<Button-1>", lambda _evento: comando())
+
                 return frame
+
+        def mostrar_previa(self, recurso):
+                messagebox.showinfo(
+                        recurso,
+                        "A interface deste recurso faz parte da remodelação V7. "
+                        "O backend será conectado na próxima etapa.",
+                        parent=self.root,
+                )
 
         def criar_card(self, parent, titulo, valor, icone):
 
@@ -882,6 +980,8 @@ class AplicacaoAutomacao:
                                 self.log.configure(state="disabled")
                 except queue.Empty:
                         pass
+                except tk.TclError:
+                        return
 
                 try:
                         while True:
@@ -892,7 +992,8 @@ class AplicacaoAutomacao:
                 except tk.TclError:
                         return
 
-                self.root.after(50, self.processar_logs)
+                if self.container.winfo_exists():
+                        self.after_logs_id = self.root.after(50, self.processar_logs)
 
         def executar_na_ui(self, callback, *args):
                 self.fila_ui.put((callback, args))
@@ -921,6 +1022,7 @@ class AplicacaoAutomacao:
                 thread.start()
 
         def executar_processo(self):
+                driver = None
                 try:
                         try:
                                 from selenium.common.exceptions import (
@@ -991,6 +1093,7 @@ class AplicacaoAutomacao:
                         self.atualizar_status(f"Abrindo {navegador.upper()}...")
                         self.atualizar_progresso(60)
                         self.adicionar_log("[AGUARDE] Abrindo navegador com Selenium...")
+                        self._encerrar_driver_selenium()
                         driver = criar_driver(navegador, caminho_executavel)
                         WebDriverWait(driver, TEMPO_ABERTURA_NAVEGADOR).until(
                                 lambda navegador_aberto: len(
@@ -1003,8 +1106,9 @@ class AplicacaoAutomacao:
 
                         self.atualizar_status("Acessando página configurada...")
                         self.atualizar_progresso(75)
-                        self.adicionar_log(f"[AGUARDE] Acessando: {LINK}")
-                        driver.get(LINK)
+                        link_validacao = obter_link_validacao()
+                        self.adicionar_log(f"[AGUARDE] Acessando: {link_validacao}")
+                        driver.get(link_validacao)
 
                         self.atualizar_status("Aguardando carregamento da página...")
                         self.atualizar_progresso(85)
@@ -1028,8 +1132,53 @@ class AplicacaoAutomacao:
                         self.adicionar_log(f"[ERRO NA AUTOMAÇÃO WEB] {erro}")
                         self.adicionar_log(traceback.format_exc())
                         self.atualizar_status("Falha na automação web. Verifique o log.")
+                        if driver is not None:
+                                self._encerrar_driver_selenium(driver)
                 finally:
                         self.habilitar_botao()
+
+        def _encerrar_driver_selenium(self, driver=None):
+                driver_alvo = driver or self.driver_selenium
+                if driver_alvo is None:
+                        return
+                try:
+                        driver_alvo.quit()
+                except Exception as erro:
+                        self.adicionar_log(
+                                f"[AVISO] Não foi possível encerrar o navegador: {erro}"
+                        )
+                finally:
+                        if self.driver_selenium is driver_alvo:
+                                self.driver_selenium = None
+
+        def encerrar_aplicacao(self):
+                if self.after_logs_id is not None:
+                        try:
+                                self.root.after_cancel(self.after_logs_id)
+                        except tk.TclError:
+                                pass
+                self._encerrar_driver_selenium()
+                self.root.destroy()
+
+        def _navegar(self, destino):
+                if self.processando:
+                        self.adicionar_log(
+                                "[INFO] Aguarde o processamento terminar antes de mudar de tela."
+                        )
+                        return
+                callback = self.navegacao.get(destino)
+                if callback is None:
+                        return
+                if self.after_logs_id is not None:
+                        try:
+                                self.root.after_cancel(self.after_logs_id)
+                        except tk.TclError:
+                                pass
+                        self.after_logs_id = None
+                self._encerrar_driver_selenium()
+                if self.container.winfo_exists():
+                        self.container.destroy()
+                callback()
 
         # ==========================================================
         # ATUALIZAÇÃO DO DASHBOARD
@@ -1048,33 +1197,164 @@ class AplicacaoAutomacao:
         def _numero_br(valor):
                 return f"{int(float(valor)):,}".replace(",", ".")
 
+        @staticmethod
+        def _decimal_br(valor):
+                return f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        @staticmethod
+        def _percentual_br(valor):
+                return f"{float(valor):.1f}%".replace(".", ",")
+
         def configurar_dashboard_categoria(self, categoria):
+                self.categoria_atual = categoria or "desconhecida"
                 configuracoes = {
-                        "vendas": (
-                                ("FATURAMENTO", "VENDAS", "ITENS VENDIDOS", "TICKET MÉDIO"),
-                                ("Produto líder", "Loja líder"),
-                        ),
-                        "financeiro": (
-                                ("RECEITA", "DESPESA", "SALDO", "MÉDIA"),
-                                ("Maior receita", "Maior despesa"),
-                        ),
-                        "estoque": (
-                                ("ESTOQUE", "PRODUTOS", "BAIXO ESTOQUE", "GIRO"),
-                                ("Produto crítico", "Maior estoque"),
-                        ),
-                        "cadastro": (
-                                ("REGISTROS", "DUPLICADOS", "AUSENTES", "ATIVOS"),
-                                ("Maior categoria", "Qualidade"),
-                        ),
-                        "recursos_humanos": (
-                                ("COLABORADORES", "SETORES", "ADMISSÕES", "DESLIGAMENTOS"),
-                                ("Maior setor", "Situação"),
-                        ),
+                        "vendas": {
+                                "cards": (
+                                        ("FATURAMENTO", "faturamento_total", "moeda"),
+                                        ("VENDAS", "total_vendas", "inteiro"),
+                                        ("ITENS VENDIDOS", "quantidade_total", "inteiro"),
+                                        ("TICKET MÉDIO", "ticket_medio", "moeda"),
+                                ),
+                                "destaques": (
+                                        ("Produto líder", "produto_maior_faturamento", "texto", "valor_produto_lider", "moeda"),
+                                        ("Loja líder", "loja_maior_faturamento", "texto", "valor_loja_lider", "moeda"),
+                                ),
+                        },
+                        "financeiro": {
+                                "cards": (
+                                        ("RECEITA", "receita_total", "moeda"),
+                                        ("DESPESA", "despesa_total", "moeda"),
+                                        ("SALDO", "saldo", "moeda"),
+                                        ("MARGEM", "margem_operacional", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Maior movimentação", "categoria_maior_movimentacao", "texto", "valor_categoria_lider", "moeda"),
+                                        ("Maior despesa", "maior_despesa", "moeda", None, None),
+                                ),
+                        },
+                        "estoque": {
+                                "cards": (
+                                        ("ESTOQUE TOTAL", "estoque_total", "inteiro"),
+                                        ("PRODUTOS", "produtos_distintos", "inteiro"),
+                                        ("BAIXO ESTOQUE", "produtos_baixo_estoque", "inteiro"),
+                                        ("VALOR DO ESTOQUE", "valor_estoque", "moeda"),
+                                ),
+                                "destaques": (
+                                        ("Produto crítico", "produto_critico", "texto", "valor_produto_critico", "inteiro"),
+                                        ("Maior estoque", "produto_maior_estoque", "texto", "valor_maior_estoque", "inteiro"),
+                                ),
+                        },
+                        "cadastro": {
+                                "cards": (
+                                        ("REGISTROS", "total_registros", "inteiro"),
+                                        ("ÚNICOS", "registros_unicos", "inteiro"),
+                                        ("DUPLICADOS", "registros_duplicados", "inteiro"),
+                                        ("ATIVOS", "registros_ativos", "inteiro"),
+                                ),
+                                "destaques": (
+                                        ("Maior categoria", "maior_categoria", "texto", "quantidade_categoria_lider", "inteiro"),
+                                        ("Qualidade da base", "qualidade.nivel_qualidade", "texto", "qualidade.score_qualidade", "percentual"),
+                                ),
+                        },
+                        "recursos_humanos": {
+                                "cards": (
+                                        ("COLABORADORES", "total_colaboradores", "inteiro"),
+                                        ("SETORES", "total_setores", "inteiro"),
+                                        ("ADMISSÕES", "total_admissoes", "inteiro"),
+                                        ("DESLIGAMENTOS", "total_desligamentos", "inteiro"),
+                                ),
+                                "destaques": (
+                                        ("Maior setor", "maior_setor", "texto", "quantidade_maior_setor", "inteiro"),
+                                        ("Folha salarial", "folha_total", "moeda", None, None),
+                                ),
+                        },
+                        "compras": {
+                                "cards": (
+                                        ("SOLICITAÇÕES", "total_solicitacoes", "inteiro"),
+                                        ("PENDENTES", "solicitacoes_pendentes", "inteiro"),
+                                        ("VALOR SOLICITADO", "valor_solicitado", "moeda"),
+                                        ("APROVAÇÃO", "taxa_aprovacao", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Fornecedor mais utilizado", "fornecedor_mais_utilizado", "texto", None, None),
+                                        ("Valor pendente", "valor_pendente", "moeda", None, None),
+                                ),
+                        },
+                        "ti": {
+                                "cards": (
+                                        ("CHAMADOS", "total_chamados", "inteiro"),
+                                        ("ABERTOS", "chamados_abertos", "inteiro"),
+                                        ("CRÍTICOS", "chamados_criticos", "inteiro"),
+                                        ("RESOLUÇÃO", "taxa_resolucao", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Categoria mais frequente", "categoria_mais_frequente", "texto", None, None),
+                                        ("Chamados reincidentes", "chamados_reincidentes", "inteiro", None, None),
+                                ),
+                        },
+                        "marketing": {
+                                "cards": (
+                                        ("INVESTIMENTO", "investimento_total", "moeda"),
+                                        ("RECEITA", "receita_atribuida", "moeda"),
+                                        ("ROAS", "roas", "decimal"),
+                                        ("CONVERSÃO", "taxa_conversao", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Melhor canal", "melhor_canal", "texto", None, None),
+                                        ("CAC", "cac", "moeda", "cpl", "moeda"),
+                                ),
+                        },
+                        "administrativo": {
+                                "cards": (
+                                        ("SOLICITAÇÕES", "total_solicitacoes", "inteiro"),
+                                        ("PENDENTES", "solicitacoes_pendentes", "inteiro"),
+                                        ("VALOR TOTAL", "valor_total", "moeda"),
+                                        ("APROVAÇÃO", "taxa_aprovacao", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Categoria principal", "categoria_principal", "texto", None, None),
+                                        ("Valor pendente", "valor_pendente", "moeda", None, None),
+                                ),
+                        },
+                        "juridico": {
+                                "cards": (
+                                        ("CONTRATOS", "total_contratos", "inteiro"),
+                                        ("ATIVOS", "contratos_ativos", "inteiro"),
+                                        ("VENCENDO", "contratos_vencendo_30_dias", "inteiro"),
+                                        ("VALOR EM RISCO", "valor_em_risco", "moeda"),
+                                ),
+                                "destaques": (
+                                        ("Risco predominante", "risco_predominante", "texto", None, None),
+                                        ("Alto risco", "contratos_alto_risco", "inteiro", None, None),
+                                ),
+                        },
+                        "comercial": {
+                                "cards": (
+                                        ("OPORTUNIDADES", "total_oportunidades", "inteiro"),
+                                        ("ABERTAS", "oportunidades_abertas", "inteiro"),
+                                        ("PIPELINE", "pipeline_aberto", "moeda"),
+                                        ("CONVERSÃO", "taxa_conversao", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Etapa principal", "etapa_principal", "texto", None, None),
+                                        ("Receita ganha", "receita_ganha", "moeda", None, None),
+                                ),
+                        },
                 }
-                titulos_cards, titulos_destaques = configuracoes.get(
-                        categoria,
-                        (("INDICADOR 1", "INDICADOR 2", "INDICADOR 3", "INDICADOR 4"),
-                         ("Destaque 1", "Destaque 2")),
+                self.dashboard_config = configuracoes.get(
+                        self.categoria_atual,
+                        {
+                                "cards": (
+                                        ("REGISTROS", "universais.total_registros", "inteiro"),
+                                        ("COLUNAS", "universais.total_colunas", "inteiro"),
+                                        ("AUSENTES", "universais.valores_ausentes", "inteiro"),
+                                        ("COMPLETUDE", "universais.completude", "percentual"),
+                                ),
+                                "destaques": (
+                                        ("Categoria", "categoria_motor", "texto", None, None),
+                                        ("Qualidade", "qualidade.nivel_qualidade", "texto", "qualidade.score_qualidade", "percentual"),
+                                ),
+                        },
                 )
                 for label, titulo in zip(
                         (
@@ -1083,32 +1363,58 @@ class AplicacaoAutomacao:
                                 self.card_quantidade_titulo,
                                 self.card_ticket_titulo,
                         ),
-                        titulos_cards,
+                        (item[0] for item in self.dashboard_config["cards"]),
                 ):
                         label.configure(text=titulo)
 
-                self.label_produto_titulo.configure(text=titulos_destaques[0])
-                self.label_loja_titulo.configure(text=titulos_destaques[1])
+                destaques = self.dashboard_config["destaques"]
+                self.label_produto_titulo.configure(text=destaques[0][0])
+                self.label_loja_titulo.configure(text=destaques[1][0])
+
+        def _obter_valor_dashboard(self, caminho):
+                if not caminho:
+                        return None
+                if caminho.startswith("qualidade."):
+                        fonte = self.analise_qualidade or {}
+                        caminho = caminho.split(".", 1)[1]
+                elif caminho.startswith("universais."):
+                        fonte = (self.indicadores_atuais or {}).get("universais") or {}
+                        caminho = caminho.split(".", 1)[1]
+                else:
+                        fonte = self.indicadores_atuais or {}
+                return fonte.get(caminho)
+
+        def _formatar_dashboard(self, valor, formato):
+                if valor is None:
+                        return "—"
+                if formato == "moeda":
+                        return self._moeda_br(valor)
+                if formato == "inteiro":
+                        return self._numero_br(valor)
+                if formato == "decimal":
+                        return self._decimal_br(valor)
+                if formato == "percentual":
+                        return self._percentual_br(valor)
+                return str(valor)
 
         def atualizar_cards_indicadores(self):
-                indicadores = self.indicadores_atuais or {}
-                if not indicadores:
+                if not self.indicadores_atuais:
                         return
-
-                configuracoes = (
-                        (self.card_faturamento, "faturamento_total", self._moeda_br),
-                        (self.card_vendas, "total_vendas", self._numero_br),
-                        (self.card_quantidade, "quantidade_total", self._numero_br),
-                        (self.card_ticket, "ticket_medio", self._moeda_br),
+                labels = (
+                        self.card_faturamento,
+                        self.card_vendas,
+                        self.card_quantidade,
+                        self.card_ticket,
                 )
-                for label, chave, formatador in configuracoes:
-                        if chave in indicadores:
-                                label.configure(
-                                        text=formatador(indicadores[chave]),
-                                        fg=self.cores["text"],
-                                )
-                        else:
-                                label.configure(text="—", fg=self.cores["text_sec"])
+                for label, (_, chave, formato) in zip(
+                        labels,
+                        self.dashboard_config.get("cards", ()),
+                ):
+                        valor = self._obter_valor_dashboard(chave)
+                        label.configure(
+                                text=self._formatar_dashboard(valor, formato),
+                                fg=self.cores["text"] if valor is not None else self.cores["text_sec"],
+                        )
 
         def atualizar_cards_desativados(self):
                 for label in (
@@ -1147,37 +1453,27 @@ class AplicacaoAutomacao:
                 )
 
         def atualizar_destaques_analise(self):
-                indicadores = self.indicadores_atuais or {}
-                produto = indicadores.get("produto_maior_faturamento")
-                loja = indicadores.get("loja_maior_faturamento")
-
-                if produto:
-                        self.label_produto.configure(
-                                text=(
-                                        f"{produto}\n"
-                                        f"{self._moeda_br(indicadores.get('valor_produto_lider', 0))}"
-                                ),
-                                fg=self.cores["text"],
-                        )
-                else:
-                        self.label_produto.configure(
-                                text="Não disponível",
-                                fg=self.cores["text_sec"],
-                        )
-
-                if loja:
-                        self.label_loja.configure(
-                                text=(
-                                        f"{loja}\n"
-                                        f"{self._moeda_br(indicadores.get('valor_loja_lider', 0))}"
-                                ),
-                                fg=self.cores["text"],
-                        )
-                else:
-                        self.label_loja.configure(
-                                text="Não disponível",
-                                fg=self.cores["text_sec"],
-                        )
+                labels = (self.label_produto, self.label_loja)
+                for label, especificacao in zip(
+                        labels,
+                        self.dashboard_config.get("destaques", ()),
+                ):
+                        _, chave, formato, detalhe_chave, detalhe_formato = especificacao
+                        valor = self._obter_valor_dashboard(chave)
+                        if valor is None:
+                                label.configure(
+                                        text="Não disponível",
+                                        fg=self.cores["text_sec"],
+                                )
+                                continue
+                        texto = self._formatar_dashboard(valor, formato)
+                        detalhe = self._obter_valor_dashboard(detalhe_chave)
+                        if detalhe is not None:
+                                texto += "\n" + self._formatar_dashboard(
+                                        detalhe,
+                                        detalhe_formato,
+                                )
+                        label.configure(text=texto, fg=self.cores["text"])
 
         def atualizar_status(self, mensagem):
                 self.executar_na_ui(self.status.set, mensagem)
@@ -1192,6 +1488,21 @@ class AplicacaoAutomacao:
                 self.atualizar_progresso(valor)
                 self.atualizar_status(mensagem)
 
+        def atualizar_progresso_motor(self, valor, mensagem):
+                # Reserva os 10% finais para uma transição visual progressiva.
+                valor_visual = min(90, int(float(valor) * 0.90))
+                if self.job_id is not None and SESSAO.autenticado():
+                        try:
+                                atualizar_job(
+                                        self.job_id,
+                                        valor_visual,
+                                        mensagem,
+                                        SESSAO.usuario,
+                                )
+                        except (RuntimeError, ValueError):
+                                pass
+                self.atualizar_status_e_progresso(valor_visual, mensagem)
+
         def _habilitar_botao_ui(self):
                 self.botao_iniciar.configure(state="normal")
 
@@ -1201,6 +1512,42 @@ class AplicacaoAutomacao:
         # ==========================================================
         # PIPELINE DE ANÁLISE
         # ==========================================================
+
+        def _criar_job_analise(self, titulo):
+                if not SESSAO.autenticado():
+                        self.job_id = None
+                        return
+                try:
+                        job = criar_job("analise", titulo, SESSAO.usuario)
+                        self.job_id = job["id"]
+                        iniciar_job(self.job_id, SESSAO.usuario)
+                        self.adicionar_log(f"[JOB] {job['codigo']}")
+                except (RuntimeError, ValueError):
+                        self.job_id = None
+
+        def _concluir_job_analise(self, resultado):
+                if self.job_id is None or not SESSAO.autenticado():
+                        return
+                universais = (resultado.get("indicadores") or {}).get("universais") or {}
+                concluir_job(
+                        self.job_id,
+                        SESSAO.usuario,
+                        {
+                                "categoria": resultado.get("categoria"),
+                                "total_registros": universais.get("total_registros"),
+                                "qualidade": (resultado.get("qualidade") or {}).get(
+                                        "score_qualidade"
+                                ),
+                        },
+                )
+
+        def _falhar_job_analise(self, erro):
+                if self.job_id is None or not SESSAO.autenticado():
+                        return
+                try:
+                        falhar_job(self.job_id, SESSAO.usuario, str(erro))
+                except (RuntimeError, ValueError):
+                        pass
 
         def carregar_arquivos_configurados(self, caminhos):
                 if not caminhos:
@@ -1247,6 +1594,24 @@ class AplicacaoAutomacao:
 
                 self._iniciar_processamento(finais, substituir=True)
 
+        def carregar_dataframe_empresarial(self, dataframe, nome_fonte):
+                if self.processando:
+                        return
+                self.arquivos_selecionados = [str(nome_fonte)]
+                self.configuracao_analise["arquivos"] = [str(nome_fonte)]
+                self.configuracao_analise["fonte"] = "sistema"
+                self._atualizar_lista_arquivos()
+                self.processando = True
+                self._criar_job_analise(f"Análise · {nome_fonte}")
+                self.progresso.configure(value=0)
+                self.status.set("Preparando dados do módulo...")
+                thread = threading.Thread(
+                        target=self._processar_dataframe_thread,
+                        args=(dataframe.copy(deep=True), str(nome_fonte)),
+                        daemon=True,
+                )
+                thread.start()
+
         def _iniciar_processamento(self, caminhos, substituir=True):
                 if self.processando:
                         self.adicionar_log(
@@ -1270,6 +1635,9 @@ class AplicacaoAutomacao:
                 )
                 self._atualizar_lista_arquivos()
                 self.processando = True
+                self._criar_job_analise(
+                        f"Análise de {len(self.arquivos_selecionados)} arquivo(s)"
+                )
                 self.progresso.configure(value=0)
                 self.status.set("Preparando análise...")
 
@@ -1282,25 +1650,88 @@ class AplicacaoAutomacao:
 
         def _processar_analise_thread(self, caminhos):
                 try:
+                        inicio = time.monotonic()
                         orquestrador = OrquestradorAnalise(
                                 logger=self.adicionar_log,
-                                progresso=self.atualizar_status_e_progresso,
+                                progresso=self.atualizar_progresso_motor,
                         )
                         resultado = orquestrador.processar(
                                 caminhos,
                                 self.configuracao_analise,
                         )
+                        atraso_minimo = max(
+                                0.0,
+                                float(
+                                        self.configuracao_analise.get(
+                                                "atraso_minimo_segundos",
+                                                5,
+                                        )
+                                ),
+                        )
+                        restante = max(0.0, atraso_minimo - (time.monotonic() - inicio))
+                        if restante:
+                                self.adicionar_log(
+                                        "[INFO] Finalizando a apresentação dos resultados..."
+                                )
+                                passos = 9
+                                for indice in range(passos):
+                                        time.sleep(restante / passos)
+                                        self.atualizar_status_e_progresso(
+                                                91 + indice,
+                                                "Organizando o dashboard...",
+                                        )
+                        self._concluir_job_analise(resultado)
                         self.executar_na_ui(
                                 self._processamento_concluido,
                                 resultado,
                         )
                 except Exception as erro:
+                        self._falhar_job_analise(erro)
                         mensagem = str(erro)
                         traceback_completo = traceback.format_exc()
                         self.executar_na_ui(
                                 self._processamento_falhou,
                                 mensagem,
                                 traceback_completo,
+                        )
+
+        def _processar_dataframe_thread(self, dataframe, nome_fonte):
+                try:
+                        inicio = time.monotonic()
+                        orquestrador = OrquestradorAnalise(
+                                logger=self.adicionar_log,
+                                progresso=self.atualizar_progresso_motor,
+                        )
+                        resultado = orquestrador.processar_dataframe(
+                                dataframe,
+                                self.configuracao_analise,
+                                nome_fonte=nome_fonte,
+                        )
+                        atraso_minimo = max(
+                                0.0,
+                                float(
+                                        self.configuracao_analise.get(
+                                                "atraso_minimo_segundos",
+                                                5,
+                                        )
+                                ),
+                        )
+                        restante = max(0.0, atraso_minimo - (time.monotonic() - inicio))
+                        if restante:
+                                for indice in range(9):
+                                        time.sleep(restante / 9)
+                                        self.atualizar_status_e_progresso(
+                                                91 + indice,
+                                                "Organizando o dashboard empresarial...",
+                                        )
+                        self._concluir_job_analise(resultado)
+                        self.executar_na_ui(self._processamento_concluido, resultado)
+                except Exception as erro:
+                        self._falhar_job_analise(erro)
+                        self.executar_na_ui(
+                                self._processamento_falhou,
+                                str(erro),
+                                traceback.format_exc(),
                         )
 
         def _processamento_concluido(self, resultado):
@@ -1312,6 +1743,26 @@ class AplicacaoAutomacao:
                 self.analise_estrutural = resultado.get("estrutural")
                 self.analise_qualidade = resultado.get("qualidade")
                 self.analise_temporal = resultado.get("temporal")
+                self.relatorio_tratamento = resultado.get("tratamento")
+
+                if SESSAO.usuario:
+                        try:
+                                historico_id = registrar_analise(
+                                        resultado,
+                                        SESSAO.usuario["id"],
+                                )
+                                self.adicionar_log(
+                                        f"[OK] Análise registrada no histórico #{historico_id}."
+                                )
+                                registrar_atividade_analytics(
+                                        historico_id,
+                                        resultado.get("categoria") or "desconhecida",
+                                        SESSAO.usuario,
+                                )
+                        except Exception as erro:
+                                self.adicionar_log(
+                                        f"[AVISO] Não foi possível salvar o histórico: {erro}"
+                                )
 
                 self.configurar_dashboard_categoria(resultado.get("categoria"))
 
@@ -1327,7 +1778,15 @@ class AplicacaoAutomacao:
                 self.label_arquivo.configure(
                         text=f"{quantidade} arquivo(s) selecionado(s)"
                 )
-                self.status.set("Análise concluída com sucesso.")
+                qualidade = self.analise_qualidade or {}
+                nivel = qualidade.get("nivel_qualidade")
+                score = qualidade.get("score_qualidade")
+                if nivel is not None and score is not None:
+                        self.status.set(
+                                f"Análise concluída · Qualidade {nivel} ({score:.1f})"
+                        )
+                else:
+                        self.status.set("Análise concluída com sucesso.")
                 self.progresso.configure(value=100)
                 self.processando = False
 
@@ -1355,5 +1814,3 @@ if __name__ == "__main__":
         app = AplicacaoAutomacao(janela)
 
         janela.mainloop()
-
-

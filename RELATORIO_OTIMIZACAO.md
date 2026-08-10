@@ -1,6 +1,17 @@
 # Relatório de otimização e revisão — Data Analytics Platform V3
 
-## 1. Apontar todos os erros iniciais.
+## 1. Objetivo da revisão
+
+A revisão foi realizada sobre o projeto completo enviado em ZIP, com quatro objetivos principais:
+
+1. corrigir bugs funcionais e riscos de execução;
+2. verificar sintaxe, indentação, imports e fluxo entre módulos;
+3. reduzir o acoplamento entre a interface Tkinter e o motor de dados;
+4. preparar a base para as próximas categorias, qualidade de dados, fontes remotas e evolução do dashboard.
+
+A prioridade foi **preservar o que já funcionava** — autenticação, usuários, seleção de arquivos, classificação de vendas, indicadores, análise temporal e identidade visual — enquanto o núcleo técnico foi reorganizado.
+
+---
 
 ## 2. Resumo executivo
 

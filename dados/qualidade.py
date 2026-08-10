@@ -4,14 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-COLUNAS_TECNICAS_PADRAO = {
-    "arquivo_origem",
-    "periodo_origem",
-    "ano_origem",
-    "mes_origem",
-    "trimestre_origem",
-    "semestre_origem",
-}
+from dados.inconsistencias import analisar_inconsistencias, detectar_outliers
+from dados.qualidade_base import COLUNAS_TECNICAS_PADRAO
 
 
 def _mascara_ausentes(df: pd.DataFrame) -> pd.DataFrame:
@@ -25,6 +19,7 @@ def _mascara_ausentes(df: pd.DataFrame) -> pd.DataFrame:
 def analisar_qualidade(
     df: pd.DataFrame,
     colunas_ignoradas: set[str] | None = None,
+    relatorio_tratamento: dict | None = None,
 ) -> dict:
     """Calcula completude, unicidade, colunas vazias e um score explicável.
 
@@ -76,14 +71,32 @@ def analisar_qualidade(
         else 100.0
     )
 
+    inconsistencias = analisar_inconsistencias(df_avaliado)
+    outliers = detectar_outliers(df_avaliado)
+    total_invalidos = int(
+        (relatorio_tratamento or {}).get("total_valores_invalidos", 0)
+    )
+    validade = 100.0 - min(
+        100.0,
+        (total_invalidos / total_celulas) * 100 if total_celulas else 0.0,
+    )
+    consistencia = 100.0 - min(
+        100.0,
+        (inconsistencias["total_inconsistencias"] / total_registros) * 100
+        if total_registros
+        else 0.0,
+    )
+
     score_qualidade = round(
         max(
             0.0,
             min(
                 100.0,
-                completude * 0.70
+                completude * 0.55
                 + unicidade * 0.20
-                + percentual_colunas_validas * 0.10,
+                + percentual_colunas_validas * 0.10
+                + validade * 0.10
+                + consistencia * 0.05,
             ),
         ),
         2,
@@ -114,6 +127,11 @@ def analisar_qualidade(
         "ausentes_por_coluna": ausentes_por_coluna,
         "completude": round(completude, 2),
         "unicidade": round(unicidade, 2),
+        "validade": round(validade, 2),
+        "consistencia": round(consistencia, 2),
+        "valores_invalidos": total_invalidos,
+        "inconsistencias": inconsistencias,
+        "outliers": outliers,
         "score_qualidade": score_qualidade,
         "nivel_qualidade": nivel,
     }

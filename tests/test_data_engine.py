@@ -42,6 +42,7 @@ class DataEngineTests(unittest.TestCase):
             "categoria": "automatica",
             "periodo": "automatico",
             "modulos": {
+                "tratamento": False,
                 "estrutural": False,
                 "indicadores": False,
                 "temporal": True,
@@ -50,10 +51,19 @@ class DataEngineTests(unittest.TestCase):
         }
         resultado = OrquestradorAnalise().processar([str(ARQUIVO_VENDAS)], config)
         self.assertIsNone(resultado["estrutural"])
+        self.assertIsNone(resultado["tratamento"])
         self.assertIsNone(resultado["qualidade"])
         self.assertIsNone(resultado["indicadores"])
         self.assertIsNotNone(resultado["temporal"])
         self.assertEqual(len(resultado["temporal"]["periodos"]), 1)
+
+    def test_orquestrador_preserva_original_e_entrega_copia_tratada(self):
+        resultado = OrquestradorAnalise().processar([str(ARQUIVO_VENDAS)])
+        self.assertIn("Código Venda", resultado["dataframe_original"].columns)
+        self.assertIn("codigo_venda", resultado["dataframe"].columns)
+        self.assertNotIn("Código Venda", resultado["dataframe"].columns)
+        self.assertEqual(len(resultado["dataframe_original"]), len(resultado["dataframe"]))
+        self.assertEqual(resultado["tratamento"]["linhas_removidas"], 0)
 
     def test_categoria_manual_preserva_deteccao_original(self):
         config = {

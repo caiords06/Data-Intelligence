@@ -25,6 +25,8 @@ class TelaPrimeiroAcesso:
 
     def criar_interface(self):
 
+        self.root.title("Data Intelligence · Configuração inicial · V7")
+
         self.container = tk.Frame(
             self.root,
             bg=self.cores["bg"]
@@ -115,6 +117,23 @@ class TelaPrimeiroAcesso:
             "*"
         )
 
+        tk.Label(
+            card,
+            text=(
+                "Use 10 ou mais caracteres com letra maiúscula, minúscula, "
+                "número e símbolo."
+            ),
+            font=("Segoe UI", 8),
+            fg=self.cores["text_muted"],
+            bg=self.cores["card"],
+            wraplength=340,
+            justify="left"
+        ).pack(
+            anchor="w",
+            padx=45,
+            pady=(3, 0)
+        )
+
         self.label_status = tk.Label(
             card,
             text="",
@@ -174,8 +193,28 @@ class TelaPrimeiroAcesso:
             pady=(0, 5)
         )
 
-        entry = tk.Entry(
+        entrada_frame = tk.Frame(
             frame,
+            bg=self.cores["border"]
+        )
+
+        entrada_frame.pack(
+            fill="x"
+        )
+
+        entrada_interior = tk.Frame(
+            entrada_frame,
+            bg=self.cores["input"]
+        )
+
+        entrada_interior.pack(
+            fill="x",
+            padx=1,
+            pady=1
+        )
+
+        entry = tk.Entry(
+            entrada_interior,
             font=("Segoe UI", 10),
             bg=self.cores["input"],
             fg=self.cores["text"],
@@ -186,7 +225,18 @@ class TelaPrimeiroAcesso:
 
         entry.pack(
             fill="x",
+            padx=(10, 6),
             ipady=8
+        )
+
+        entry.bind(
+            "<FocusIn>",
+            lambda _evento: entrada_frame.configure(bg=self.cores["primary"])
+        )
+
+        entry.bind(
+            "<FocusOut>",
+            lambda _evento: entrada_frame.configure(bg=self.cores["border"])
         )
 
         return entry

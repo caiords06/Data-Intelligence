@@ -21,11 +21,13 @@ from dados.leitor import (
     verificar_compatibilidade,
 )
 from dados.qualidade import analisar_qualidade
+from dados.tratamento import tratar_dataframe
 
 Logger = Callable[[str], None]
 ProgressCallback = Callable[[int, str], None]
 
 MODULOS_PADRAO = {
+    "tratamento": True,
     "estrutural": True,
     "indicadores": True,
     "temporal": True,
@@ -130,8 +132,67 @@ class OrquestradorAnalise:
         self.log(f"[OK] Total de registros: {len(df_consolidado)}")
         self.log(f"[OK] Total de colunas: {len(df_consolidado.columns)}")
 
+        return self._analisar_dataframe_consolidado(
+            df_consolidado,
+            config,
+            caminhos=caminhos,
+            resultados_arquivos=resultados_arquivos,
+        )
+
+    def processar_dataframe(
+        self,
+        dataframe: pd.DataFrame,
+        configuracao: dict | None = None,
+        *,
+        nome_fonte: str = "Módulo empresarial",
+    ) -> dict:
+        """Executa o mesmo motor sobre dados internos, sem arquivo temporário."""
+        if not isinstance(dataframe, pd.DataFrame):
+            raise TypeError("A fonte empresarial precisa ser um pandas.DataFrame.")
+        if dataframe.empty:
+            raise ValueError("O módulo ainda não possui registros para análise.")
+        config = normalizar_configuracao(configuracao)
+        config["fonte"] = "sistema"
+        self.progresso(10, "Carregando dados do módulo...")
+        self.separador()
+        self.log("FONTE EMPRESARIAL SELECIONADA")
+        self.separador()
+        self.log(f"[OK] Fonte: {nome_fonte}")
+        self.log(f"[OK] Registros: {len(dataframe)}")
+        self.log(f"[OK] Colunas: {len(dataframe.columns)}")
+        return self._analisar_dataframe_consolidado(
+            dataframe.copy(deep=True),
+            config,
+            caminhos=[nome_fonte],
+            resultados_arquivos=[
+                {
+                    "nome_arquivo": nome_fonte,
+                    "dataframe": dataframe.copy(deep=True),
+                    "periodo": {},
+                }
+            ],
+        )
+
+    def _analisar_dataframe_consolidado(
+        self,
+        dataframe: pd.DataFrame,
+        config: dict,
+        *,
+        caminhos: list[str],
+        resultados_arquivos: list[dict],
+    ) -> dict:
+        df_original = dataframe.copy(deep=True)
+        df_consolidado = dataframe.copy(deep=True)
+        df_consolidado, relatorio_tratamento = self._executar_tratamento(
+            df_consolidado,
+            config,
+        )
         analise_estrutural = self._executar_estrutural(df_consolidado, config)
-        analise_qualidade = self._executar_qualidade(df_consolidado, config)
+        analise_qualidade = self._executar_qualidade(
+            df_consolidado,
+            config,
+            relatorio_tratamento,
+        )
         classificacao = self._executar_classificacao(df_consolidado, config)
         indicadores = self._executar_indicadores(df_consolidado, classificacao, config)
         analise_temporal = self._executar_temporal(df_consolidado, classificacao, config)
@@ -140,7 +201,9 @@ class OrquestradorAnalise:
             "arquivos": caminhos,
             "configuracao": deepcopy(config),
             "resultados_arquivos": resultados_arquivos,
+            "dataframe_original": df_original,
             "dataframe": df_consolidado,
+            "tratamento": relatorio_tratamento,
             "categoria": classificacao["categoria"],
             "classificacao": classificacao,
             "estrutural": analise_estrutural,
@@ -153,6 +216,10 @@ class OrquestradorAnalise:
         self.log("RESULTADO ANALÍTICO CONSOLIDADO")
         self.separador()
         self.log(f"[OK] Categoria: {resultado['categoria'].upper()}")
+        self.log(
+            f"[OK] Tratamento: "
+            f"{'Disponível' if relatorio_tratamento else 'Não executado'}"
+        )
         self.log(f"[OK] Estrutural: {'Disponível' if analise_estrutural else 'Não executada'}")
         self.log(f"[OK] Qualidade: {'Disponível' if analise_qualidade else 'Não executada'}")
         self.log(f"[OK] Indicadores: {'Disponível' if indicadores else 'Não executados'}")
@@ -177,6 +244,41 @@ class OrquestradorAnalise:
         if periodo.get("semestre"):
             self.log(f"    [SEMESTRE] {periodo.get('semestre')}")
 
+    def _executar_tratamento(
+        self,
+        df: pd.DataFrame,
+        config: dict,
+    ) -> tuple[pd.DataFrame, dict | None]:
+        if not config["modulos"]["tratamento"]:
+            self.log("[INFO] Tratamento seguro dos dados desativado na configuração.")
+            return df.copy(), None
+
+        self.progresso(36, "Tratando e validando dados...")
+        self.separador()
+        self.log("TRATAMENTO E VALIDAÇÃO")
+        self.separador()
+        tratado, relatorio = tratar_dataframe(df)
+        self.log(
+            f"[OK] Colunas normalizadas: "
+            f"{relatorio['quantidade_colunas_renomeadas']}"
+        )
+        self.log(f"[OK] Textos ajustados: {relatorio['textos_ajustados']}")
+        self.log(
+            f"[OK] Colunas convertidas: "
+            f"{relatorio['quantidade_colunas_convertidas']}"
+        )
+        self.log(
+            f"[{'AVISO' if relatorio['total_valores_invalidos'] else 'OK'}] "
+            f"Valores inválidos encontrados: {relatorio['total_valores_invalidos']}"
+        )
+        if relatorio["colisoes_colunas"]:
+            self.log(
+                f"[AVISO] Colisões de nomes resolvidas: "
+                f"{relatorio['quantidade_colisoes_colunas']}"
+            )
+        self.log("[OK] Nenhuma linha foi removida automaticamente.")
+        return tratado, relatorio
+
     def _executar_estrutural(self, df: pd.DataFrame, config: dict) -> dict | None:
         if not config["modulos"]["estrutural"]:
             self.log("[INFO] Análise estrutural desativada na configuração.")
@@ -195,7 +297,12 @@ class OrquestradorAnalise:
         self.log("[OK] Análise estrutural concluída.")
         return estrutura
 
-    def _executar_qualidade(self, df: pd.DataFrame, config: dict) -> dict | None:
+    def _executar_qualidade(
+        self,
+        df: pd.DataFrame,
+        config: dict,
+        relatorio_tratamento: dict | None,
+    ) -> dict | None:
         if not config["modulos"]["qualidade"]:
             self.log("[INFO] Qualidade dos dados desativada na configuração.")
             return None
@@ -204,12 +311,22 @@ class OrquestradorAnalise:
         self.separador()
         self.log("QUALIDADE DOS DADOS")
         self.separador()
-        qualidade = analisar_qualidade(df)
+        qualidade = analisar_qualidade(
+            df,
+            relatorio_tratamento=relatorio_tratamento,
+        )
         self.log(f"[+] Completude: {qualidade['completude']:.2f}%")
         self.log(f"[+] Valores ausentes: {qualidade['valores_ausentes']}")
         self.log(f"[+] Linhas com dados ausentes: {qualidade['linhas_com_ausentes']}")
         self.log(f"[+] Registros duplicados: {qualidade['linhas_duplicadas']}")
         self.log(f"[+] Colunas totalmente vazias: {qualidade['quantidade_colunas_vazias']}")
+        self.log(f"[+] Validade dos tipos: {qualidade['validade']:.2f}%")
+        self.log(f"[+] Consistência: {qualidade['consistencia']:.2f}%")
+        self.log(
+            f"[+] Inconsistências: "
+            f"{qualidade['inconsistencias']['total_inconsistencias']}"
+        )
+        self.log(f"[+] Outliers sinalizados: {qualidade['outliers']['total_outliers']}")
         self.log("-" * 40)
         self.log(f"[OK] Score de qualidade: {qualidade['score_qualidade']:.2f}/100")
         self.log(f"[OK] Classificação: {qualidade['nivel_qualidade']}")
@@ -301,28 +418,100 @@ class OrquestradorAnalise:
         self.log("MOTOR DE INDICADORES")
         self.separador()
         self.log("[OK] Indicadores calculados.")
-        self._registrar_indicadores_vendas(indicadores)
+        self._registrar_indicadores(categoria, indicadores)
         return indicadores
 
-    def _registrar_indicadores_vendas(self, indicadores: dict) -> None:
+    def _registrar_indicadores(self, categoria: str, indicadores: dict) -> None:
         self.separador()
-        self.log("RESUMO FINANCEIRO")
+        self.log(f"RESUMO {categoria.replace('_', ' ').upper()}")
         self.separador()
-        campos = (
-            ("faturamento_total", "Faturamento total", "moeda"),
-            ("total_vendas", "Total de vendas", "inteiro"),
-            ("quantidade_total", "Quantidade vendida", "inteiro"),
-            ("ticket_medio", "Ticket médio", "moeda"),
-            ("preco_medio_unidade", "Preço médio/unidade", "moeda"),
-        )
+
+        universais = indicadores.get("universais") or {}
+        self.log(f"[+] Registros analisados: {universais.get('total_registros', 0):,}")
+        self.log(f"[+] Colunas de negócio: {universais.get('total_colunas', 0)}")
+        self.log(f"[+] Completude universal: {universais.get('completude', 0):.2f}%")
+
+        campos_por_categoria = {
+            "vendas": (
+                ("faturamento_total", "Faturamento total", "moeda"),
+                ("total_vendas", "Total de vendas", "inteiro"),
+                ("quantidade_total", "Quantidade vendida", "inteiro"),
+                ("ticket_medio", "Ticket médio", "moeda"),
+            ),
+            "financeiro": (
+                ("receita_total", "Receita total", "moeda"),
+                ("despesa_total", "Despesa total", "moeda"),
+                ("saldo", "Saldo", "moeda"),
+                ("margem_operacional", "Margem operacional", "percentual"),
+            ),
+            "estoque": (
+                ("estoque_total", "Estoque total", "numero"),
+                ("produtos_distintos", "Produtos distintos", "inteiro"),
+                ("produtos_baixo_estoque", "Baixo estoque", "inteiro"),
+                ("valor_estoque", "Valor do estoque", "moeda"),
+            ),
+            "cadastro": (
+                ("total_registros", "Registros", "inteiro"),
+                ("registros_unicos", "Registros únicos", "inteiro"),
+                ("registros_duplicados", "Duplicados", "inteiro"),
+                ("completude", "Completude", "percentual"),
+            ),
+            "recursos_humanos": (
+                ("total_colaboradores", "Colaboradores", "inteiro"),
+                ("colaboradores_ativos", "Ativos", "inteiro"),
+                ("folha_total", "Folha total", "moeda"),
+                ("turnover_percentual", "Turnover", "percentual"),
+            ),
+            "compras": (
+                ("total_solicitacoes", "Solicitações", "inteiro"),
+                ("solicitacoes_pendentes", "Pendentes", "inteiro"),
+                ("valor_solicitado", "Valor solicitado", "moeda"),
+                ("taxa_aprovacao", "Taxa de aprovação", "percentual"),
+            ),
+            "ti": (
+                ("total_chamados", "Chamados", "inteiro"),
+                ("chamados_abertos", "Abertos", "inteiro"),
+                ("chamados_criticos", "Críticos", "inteiro"),
+                ("taxa_resolucao", "Taxa de resolução", "percentual"),
+            ),
+            "marketing": (
+                ("investimento_total", "Investimento", "moeda"),
+                ("receita_atribuida", "Receita atribuída", "moeda"),
+                ("roas", "ROAS", "numero"),
+                ("taxa_conversao", "Taxa de conversão", "percentual"),
+            ),
+            "administrativo": (
+                ("total_solicitacoes", "Solicitações", "inteiro"),
+                ("solicitacoes_pendentes", "Pendentes", "inteiro"),
+                ("valor_total", "Valor total", "moeda"),
+                ("taxa_aprovacao", "Taxa de aprovação", "percentual"),
+            ),
+            "juridico": (
+                ("total_contratos", "Contratos", "inteiro"),
+                ("contratos_vencendo_30_dias", "Vencendo em 30 dias", "inteiro"),
+                ("valor_em_risco", "Valor em risco", "moeda"),
+                ("contratos_alto_risco", "Alto risco", "inteiro"),
+            ),
+            "comercial": (
+                ("total_oportunidades", "Oportunidades", "inteiro"),
+                ("oportunidades_abertas", "Abertas", "inteiro"),
+                ("pipeline_aberto", "Pipeline", "moeda"),
+                ("taxa_conversao", "Taxa de conversão", "percentual"),
+            ),
+        }
+        campos = campos_por_categoria.get(categoria, ())
         for chave, rotulo, tipo in campos:
             if chave not in indicadores:
                 continue
             valor = indicadores[chave]
             if tipo == "moeda":
                 self.log(f"[+] {rotulo}: R$ {valor:,.2f}")
-            else:
+            elif tipo == "percentual":
+                self.log(f"[+] {rotulo}: {valor:,.2f}%")
+            elif tipo == "inteiro":
                 self.log(f"[+] {rotulo}: {valor:,.0f}")
+            else:
+                self.log(f"[+] {rotulo}: {valor:,.2f}")
 
         self.log("-" * 40)
         self.log("DESTAQUES")
@@ -333,6 +522,20 @@ class OrquestradorAnalise:
         if "loja_maior_faturamento" in indicadores:
             self.log(f"[+] Loja líder: {indicadores['loja_maior_faturamento']}")
             self.log(f"    Faturamento: R$ {indicadores['valor_loja_lider']:,.2f}")
+        destaques = {
+            "financeiro": (
+                ("categoria_maior_movimentacao", "Categoria de maior movimentação"),
+            ),
+            "estoque": (
+                ("produto_critico", "Produto crítico"),
+                ("produto_maior_estoque", "Maior estoque"),
+            ),
+            "cadastro": (("maior_categoria", "Maior categoria"),),
+            "recursos_humanos": (("maior_setor", "Maior setor"),),
+        }
+        for chave, rotulo in destaques.get(categoria, ()):
+            if indicadores.get(chave) is not None:
+                self.log(f"[+] {rotulo}: {indicadores[chave]}")
 
     def _executar_temporal(
         self,
