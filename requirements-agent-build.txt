@@ -1,0 +1,3 @@
+# Utilizado somente para gerar o executável distribuível do agente.
+# PyInstaller 6.15+ inclui suporte oficial ao Python 3.14.
+pyinstaller>=6.15,<7

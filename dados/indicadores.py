@@ -267,6 +267,7 @@ def calcular_indicadores_estoque(df: pd.DataFrame, campos: dict) -> dict:
     coluna_estoque = mapa.get("estoque") or mapa.get("quantidade")
     coluna_produto = mapa.get("produto")
     estoque = _serie_numerica(df, coluna_estoque)
+    estoque_minimo = _serie_numerica(df, mapa.get("estoque_minimo"))
     estoque_valido = estoque.dropna()
     produtos = _serie_texto(df, coluna_produto)
     custo = _serie_numerica(df, mapa.get("custo"))
@@ -274,10 +275,13 @@ def calcular_indicadores_estoque(df: pd.DataFrame, campos: dict) -> dict:
         custo = _serie_numerica(df, mapa.get("valor_unitario"))
 
     total_produtos = int(produtos.nunique(dropna=True)) if coluna_produto in df.columns else int(len(df))
+    limite_baixo = estoque_minimo.where(estoque_minimo.notna(), 5)
     resultado = {
         "estoque_total": _float_seguro(estoque_valido.sum()),
         "produtos_distintos": total_produtos,
-        "produtos_baixo_estoque": int(((estoque > 0) & (estoque <= 5)).sum()),
+        "produtos_baixo_estoque": int(
+            ((estoque > 0) & (estoque <= limite_baixo)).sum()
+        ),
         "produtos_sem_estoque": int((estoque <= 0).sum()),
         "estoque_medio": _float_seguro(estoque_valido.mean()),
         "valor_estoque": _float_seguro((estoque * custo).sum()),
@@ -366,7 +370,9 @@ def calcular_indicadores_rh(df: pd.DataFrame, campos: dict) -> dict:
         "colaboradores_inativos": inativos,
         "folha_total": _float_seguro(salarios.sum()),
         "salario_medio": _float_seguro(salarios.mean()),
-        "turnover_percentual": round(
+        # Não há intervalo nem headcount médio suficiente para chamar esta
+        # razão de turnover. O nome explicita exatamente o cálculo realizado.
+        "taxa_desligamentos_sobre_base_percentual": round(
             int(desligamentos.notna().sum()) / colaboradores * 100,
             2,
         ) if colaboradores else 0.0,

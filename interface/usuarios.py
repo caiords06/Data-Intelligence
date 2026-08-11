@@ -22,8 +22,18 @@ from enterprise.perfis_acesso import (
     nome_perfil_acesso,
     opcoes_perfis_acesso,
 )
-from interface.componentes import criar_sidebar
-from interface.tema import CORES, adicionar_divisorias_treeview, configurar_estilos_ttk
+from interface.componentes import (
+    AreaRolavel,
+    criar_cabecalho,
+    criar_sidebar,
+    preparar_janela_secundaria,
+)
+from interface.tema import (
+    CORES,
+    LAYOUT,
+    adicionar_divisorias_treeview,
+    configurar_estilos_ttk,
+)
 
 
 def _bloqueio_ativo(valor) -> bool:
@@ -58,31 +68,33 @@ class TelaUsuarios:
             rodape_texto="←   Voltar ao início",
             rodape_comando=self.navegacao.get("inicio"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(side="left", fill="both", expand=True, padx=40, pady=34)
-
-        tk.Label(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=LAYOUT["conteudo_padx"],
+            pady=(28, 24),
+        )
+        conteudo = viewport.conteudo
+        criar_cabecalho(
             conteudo,
-            text="Gerenciamento de usuários",
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            conteudo,
-            text=(
+            "Usuários e acessos",
+            (
                 "Cadastre acessos, aplique perfis departamentais e personalize "
                 "permissões. As operações ficam registradas na auditoria local."
             ),
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(5, 24))
+            breadcrumb="GESTÃO  /  USUÁRIOS E ACESSOS",
+            etiqueta="SEGURANÇA V9.0",
+        )
 
         area = tk.Frame(conteudo, bg=CORES["bg"])
         area.pack(fill="both", expand=True)
+        area.grid_columnconfigure(0, weight=3, uniform="usuarios")
+        area.grid_columnconfigure(1, weight=2, uniform="usuarios")
         self._criar_lista(area)
         self._criar_formulario(area)
+        area.bind("<Configure>", self._reorganizar_paineis, add="+")
 
     def _criar_lista(self, parent):
         painel = tk.Frame(
@@ -91,7 +103,7 @@ class TelaUsuarios:
             highlightthickness=1,
             highlightbackground=CORES["border"],
         )
-        painel.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        self.painel_lista = painel
         tk.Label(
             painel,
             text="USUÁRIOS CADASTRADOS",
@@ -102,21 +114,44 @@ class TelaUsuarios:
 
         configurar_estilos_ttk(self.root)
 
+        area_tabela = tk.Frame(painel, bg=CORES["card"])
+        area_tabela.pack(fill="both", expand=True, padx=20, pady=(0, 15))
         self.tabela = ttk.Treeview(
-            painel,
-            columns=("nome", "usuario", "perfil", "status"),
+            area_tabela,
+            columns=("nome", "usuario", "email", "perfil", "status"),
             show="headings",
             style="Dark.Treeview",
         )
         for coluna, titulo, largura in (
             ("nome", "Nome", 190),
-            ("usuario", "Usuário", 120),
+            ("usuario", "Usuário", 110),
+            ("email", "E-mail corporativo", 190),
             ("perfil", "Perfil de acesso", 120),
             ("status", "Status", 105),
         ):
             self.tabela.heading(coluna, text=titulo)
-            self.tabela.column(coluna, width=largura)
-        self.tabela.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+            self.tabela.column(coluna, width=largura, minwidth=max(80, largura // 2), stretch=True)
+        barra_vertical = ttk.Scrollbar(
+            area_tabela,
+            orient="vertical",
+            command=self.tabela.yview,
+            style="Dark.Vertical.TScrollbar",
+        )
+        barra_horizontal = ttk.Scrollbar(
+            area_tabela,
+            orient="horizontal",
+            command=self.tabela.xview,
+            style="Dark.Horizontal.TScrollbar",
+        )
+        self.tabela.configure(
+            yscrollcommand=barra_vertical.set,
+            xscrollcommand=barra_horizontal.set,
+        )
+        self.tabela.grid(row=0, column=0, sticky="nsew")
+        barra_vertical.grid(row=0, column=1, sticky="ns")
+        barra_horizontal.grid(row=1, column=0, sticky="ew")
+        area_tabela.grid_rowconfigure(0, weight=1, minsize=260)
+        area_tabela.grid_columnconfigure(0, weight=1)
         adicionar_divisorias_treeview(self.tabela)
 
         botoes = tk.Frame(painel, bg=CORES["card"])
@@ -142,12 +177,10 @@ class TelaUsuarios:
         painel = tk.Frame(
             parent,
             bg=CORES["card"],
-            width=340,
             highlightthickness=1,
             highlightbackground=CORES["border"],
         )
-        painel.pack(side="left", fill="y", padx=(10, 0))
-        painel.pack_propagate(False)
+        self.painel_formulario = painel
         tk.Label(
             painel,
             text="NOVO USUÁRIO",
@@ -158,6 +191,7 @@ class TelaUsuarios:
 
         self.entry_nome = self._criar_campo(painel, "Nome completo")
         self.entry_usuario = self._criar_campo(painel, "Usuário")
+        self.entry_email = self._criar_campo(painel, "E-mail corporativo")
         self.entry_senha = self._criar_campo(painel, "Senha inicial", "*")
         self.entry_confirmar = self._criar_campo(painel, "Confirmar senha", "*")
         tk.Label(
@@ -228,6 +262,28 @@ class TelaUsuarios:
             command=self.cadastrar,
         ).pack(fill="x", padx=25, pady=16, ipady=8)
 
+    def _reorganizar_paineis(self, evento=None):
+        """Mantém o formulário legível sem recortar a lista de usuários."""
+        largura = evento.width if evento is not None else 0
+        for painel in (self.painel_lista, self.painel_formulario):
+            painel.grid_forget()
+        if largura >= 900:
+            self.painel_lista.grid(
+                row=0, column=0, sticky="nsew", padx=(0, 10)
+            )
+            self.painel_formulario.grid(
+                row=0, column=1, sticky="nsew", padx=(10, 0)
+            )
+        else:
+            self.painel_lista.grid(row=0, column=0, columnspan=2, sticky="nsew")
+            self.painel_formulario.grid(
+                row=1,
+                column=0,
+                columnspan=2,
+                sticky="nsew",
+                pady=(16, 0),
+            )
+
     @staticmethod
     def _botao_secundario(parent, texto, comando):
         return tk.Button(
@@ -289,6 +345,7 @@ class TelaUsuarios:
                 values=(
                     usuario["nome"],
                     usuario["usuario"],
+                    usuario.get("email_corporativo") or "—",
                     nome_perfil_acesso(
                         usuario.get("perfil_acesso"),
                         administrador=usuario["perfil"] == "admin",
@@ -325,6 +382,7 @@ class TelaUsuarios:
                 perfil_acesso=(
                     None if perfil_acesso == "administrador" else perfil_acesso
                 ),
+                email_corporativo=self.entry_email.get() or None,
             )
             if perfil_conta != "admin":
                 aplicar_perfil_padrao_usuario(
@@ -339,6 +397,7 @@ class TelaUsuarios:
         for entry in (
             self.entry_nome,
             self.entry_usuario,
+            self.entry_email,
             self.entry_senha,
             self.entry_confirmar,
         ):
@@ -410,10 +469,9 @@ class TelaUsuarios:
 
         janela = tk.Toplevel(self.root)
         janela.title(f"Perfil de acesso · {usuario['nome']}")
-        janela.geometry("480x250")
-        janela.resizable(False, False)
-        janela.transient(self.root)
-        janela.grab_set()
+        preparar_janela_secundaria(
+            janela, self.root, 480, 250, redimensionavel=False
+        )
         janela.configure(bg=CORES["bg"])
 
         tk.Label(
@@ -530,9 +588,9 @@ class TelaUsuarios:
 
         janela = tk.Toplevel(self.root)
         janela.title(f"Permissões · {usuario['nome']}")
-        janela.geometry("650x590")
-        janela.transient(self.root)
-        janela.grab_set()
+        preparar_janela_secundaria(
+            janela, self.root, 650, 590, minimo=(580, 500)
+        )
         janela.configure(bg=CORES["bg"])
         tk.Label(
             janela,

@@ -25,6 +25,11 @@ from dados.tratamento import tratar_dataframe
 
 Logger = Callable[[str], None]
 ProgressCallback = Callable[[int, str], None]
+CancelCallback = Callable[[], bool]
+
+
+class ProcessamentoCancelado(RuntimeError):
+    """Interrupção cooperativa do pipeline analítico."""
 
 MODULOS_PADRAO = {
     "tratamento": True,
@@ -55,14 +60,18 @@ class OrquestradorAnalise:
         self,
         logger: Logger | None = None,
         progresso: ProgressCallback | None = None,
+        cancelar: CancelCallback | None = None,
     ) -> None:
         self._logger = logger or (lambda _mensagem: None)
         self._progresso = progresso or (lambda _valor, _mensagem: None)
+        self._cancelar = cancelar or (lambda: False)
 
     def log(self, mensagem: str = "") -> None:
         self._logger(str(mensagem))
 
     def progresso(self, valor: int, mensagem: str) -> None:
+        if self._cancelar():
+            raise ProcessamentoCancelado("Processamento cancelado com segurança.")
         self._progresso(max(0, min(100, int(valor))), mensagem)
 
     def separador(self, caractere: str = "=") -> None:
@@ -79,11 +88,15 @@ class OrquestradorAnalise:
             raise ValueError("Nenhum arquivo foi selecionado para análise.")
 
         fonte = str(config.get("fonte", "computador")).lower()
-        if fonte != "computador":
-            raise NotImplementedError(
-                f"A fonte '{fonte}' ainda não está implementada. "
-                "Utilize 'Computador' nesta versão."
-            )
+        fontes_preparadas = {
+            "computador",
+            "google_drive",
+            "onedrive",
+            "banco_de_dados",
+            "url",
+        }
+        if fonte not in fontes_preparadas:
+            raise ValueError(f"Fonte de dados não suportada: {fonte}.")
 
         if config.get("ia"):
             self.log(
@@ -120,6 +133,8 @@ class OrquestradorAnalise:
                     self.log(f"       Colunas ausentes: {item['faltando']}")
                 if item.get("extras"):
                     self.log(f"       Colunas extras: {item['extras']}")
+                if item.get("tipos"):
+                    self.log(f"       Tipos incompatíveis: {item['tipos']}")
             raise ValueError("Os arquivos selecionados possuem estruturas incompatíveis.")
         self.log("[OK] Estrutura dos arquivos compatível.")
 

@@ -11,7 +11,10 @@ from enterprise.central import (
     remover_aprovacao_da_fila,
 )
 from enterprise.contexto import tem_permissao
-from interface.componentes import criar_botao, criar_card, criar_sidebar
+from interface.componentes import (
+    AreaRolavel, criar_botao, criar_cabecalho, criar_card,
+    criar_estado_vazio, criar_sidebar,
+)
 from interface.tema import (
     CORES,
     LAYOUT,
@@ -39,36 +42,32 @@ class TelaAprovacoes:
             rodape_texto="←   Voltar ao cockpit",
             rodape_comando=self.navegacao.get("inicio"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
             side="left",
             fill="both",
             expand=True,
             padx=LAYOUT["conteudo_padx"],
             pady=(28, 24),
         )
-        tk.Label(
+        conteudo = viewport.conteudo
+        criar_cabecalho(
             conteudo,
-            text="Aprovações centralizadas",
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            conteudo,
-            text=(
+            "Aprovações centralizadas",
+            (
                 "Compras e solicitações sensíveis permanecem pendentes até uma decisão humana autorizada."
             ),
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(5, 20))
+            breadcrumb="CENTRAL DA APLICAÇÃO  /  APROVAÇÕES",
+            etiqueta="DECISÃO HUMANA",
+        )
 
         painel = criar_card(conteudo)
         painel.pack(fill="both", expand=True)
+        area_tabela = tk.Frame(painel, bg=CORES["card"])
+        area_tabela.pack(fill="both", expand=True, padx=16, pady=16)
         colunas = ("modulo", "titulo", "valor", "solicitante", "data", "status")
         self.tabela = ttk.Treeview(
-            painel,
+            area_tabela,
             columns=colunas,
             show="headings",
             style="Dark.Treeview",
@@ -84,42 +83,36 @@ class TelaAprovacoes:
             self.tabela.heading(coluna, text=titulo)
             self.tabela.column(coluna, width=largura, anchor="w")
         barra = ttk.Scrollbar(
-            painel,
+            area_tabela,
             orient="vertical",
             command=self.tabela.yview,
             style="Dark.Vertical.TScrollbar",
         )
-        self.tabela.configure(yscrollcommand=barra.set)
-        self.tabela.pack(side="left", fill="both", expand=True, padx=(16, 0), pady=16)
-        barra.pack(side="right", fill="y", padx=(0, 16), pady=16)
+        barra_horizontal = ttk.Scrollbar(
+            area_tabela, orient="horizontal", command=self.tabela.xview,
+            style="Dark.Horizontal.TScrollbar",
+        )
+        self.tabela.configure(
+            yscrollcommand=barra.set, xscrollcommand=barra_horizontal.set
+        )
+        self.tabela.grid(row=0, column=0, sticky="nsew")
+        barra.grid(row=0, column=1, sticky="ns")
+        barra_horizontal.grid(row=1, column=0, sticky="ew")
+        area_tabela.grid_rowconfigure(0, weight=1, minsize=310)
+        area_tabela.grid_columnconfigure(0, weight=1)
         self.tabela.bind("<<TreeviewSelect>>", self._selecionou)
 
-        self.estado_vazio = tk.Frame(painel, bg=CORES["input"])
-        tk.Label(
-            self.estado_vazio,
-            text="✓",
-            font=("Segoe UI", 28, "bold"),
-            fg=CORES["success"],
-            bg=CORES["input"],
-        ).pack()
+        self.estado_vazio = criar_estado_vazio(
+            area_tabela,
+            "✓",
+            "Nenhuma aprovação disponível",
+            "Novas solicitações de Compras e Administrativo aparecerão aqui.",
+            cor=CORES["success"],
+        )
         adicionar_divisorias_treeview(
             self.tabela,
             sobreposicao=self.estado_vazio,
         )
-        tk.Label(
-            self.estado_vazio,
-            text="Nenhuma aprovação disponível",
-            font=("Segoe UI", 12, "bold"),
-            fg=CORES["text"],
-            bg=CORES["input"],
-        ).pack(pady=(7, 3))
-        tk.Label(
-            self.estado_vazio,
-            text="Novas solicitações de Compras e Administrativo aparecerão aqui.",
-            font=("Segoe UI", 8),
-            fg=CORES["text_sec"],
-            bg=CORES["input"],
-        ).pack()
 
         rodape = tk.Frame(conteudo, bg=CORES["bg"])
         rodape.pack(fill="x", pady=(14, 0))
@@ -169,7 +162,8 @@ class TelaAprovacoes:
         if self.registros:
             self.estado_vazio.place_forget()
         else:
-            self.estado_vazio.place(relx=0.5, rely=0.5, anchor="center")
+            self.estado_vazio.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.estado_vazio.lift()
         self.status.configure(text=f"{len(self.registros)} solicitação(ões)")
         self._selecionou()
 

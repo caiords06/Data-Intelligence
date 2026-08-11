@@ -8,6 +8,21 @@ from pathlib import Path
 import pandas as pd
 
 from auth.banco import conectar, registrar_auditoria
+from auth.sessao import SESSAO
+from enterprise.contexto import garantir_contexto_sessao
+
+
+def _contexto_historico() -> tuple[int | None, int | None]:
+    """Retorna o contexto ativo sem quebrar bases legadas sem Enterprise Core.
+
+    A interface sempre trabalha com uma sessão autenticada e, nesse caso, o
+    isolamento por empresa/filial continua obrigatório. A alternativa ``NULL``
+    existe somente para migrações, testes e registros criados antes do suporte
+    multiempresa.
+    """
+    if SESSAO.usuario is None:
+        return None, None
+    return garantir_contexto_sessao()
 
 
 def inicializar_historico() -> None:
@@ -30,6 +45,23 @@ def inicializar_historico() -> None:
             )
             """
         )
+        colunas = {
+            item["name"]
+            for item in conexao.execute(
+                "PRAGMA table_info(historico_analises)"
+            ).fetchall()
+        }
+        for nome, definicao in (
+            ("empresa_id", "INTEGER"),
+            ("filial_id", "INTEGER"),
+            ("estado_registro", "TEXT NOT NULL DEFAULT 'Ativo'"),
+            ("excluido_em", "TEXT"),
+            ("excluido_por", "INTEGER"),
+        ):
+            if nome not in colunas:
+                conexao.execute(
+                    f"ALTER TABLE historico_analises ADD COLUMN {nome} {definicao}"
+                )
 
 
 def _json_seguro(valor):
@@ -47,7 +79,13 @@ def _json_seguro(valor):
     return str(valor)
 
 
-def registrar_analise(resultado: dict, usuario_id: int) -> int:
+def registrar_analise(
+    resultado: dict,
+    usuario_id: int,
+    *,
+    empresa_id: int | None = None,
+    filial_id: int | None = None,
+) -> int:
     inicializar_historico()
     df = resultado.get("dataframe")
     total_registros = int(len(df)) if isinstance(df, pd.DataFrame) else 0
@@ -75,17 +113,28 @@ def registrar_analise(resultado: dict, usuario_id: int) -> int:
         "temporal": resultado.get("temporal") or {},
     }
     configuracao = resultado.get("configuracao") or {}
+    if empresa_id is None:
+        if SESSAO.empresa_id is not None:
+            empresa_id, filial_id = SESSAO.empresa_id, SESSAO.filial_id
+        else:
+            try:
+                empresa_id, filial_id = garantir_contexto_sessao()
+            except (PermissionError, RuntimeError):
+                empresa_id, filial_id = None, None
     with conectar() as conexao:
         cursor = conexao.execute(
             """
             INSERT INTO historico_analises (
-                usuario_id, categoria, fonte, quantidade_arquivos,
+                usuario_id, empresa_id, filial_id,
+                categoria, fonte, quantidade_arquivos,
                 total_registros, total_colunas, score_qualidade,
                 nivel_qualidade, status, resumo_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'concluida', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'concluida', ?)
             """,
             (
                 int(usuario_id),
+                empresa_id,
+                filial_id,
                 str(resultado.get("categoria") or "desconhecida"),
                 str(configuracao.get("fonte") or "computador"),
                 len(arquivos),
@@ -108,16 +157,34 @@ def registrar_analise(resultado: dict, usuario_id: int) -> int:
 def listar_historico(ator: dict, limite: int = 200) -> list[dict]:
     inicializar_historico()
     limite = max(1, min(int(limite), 1000))
+    empresa_id, filial_id = _contexto_historico()
     with conectar() as conexao:
-        if ator.get("perfil") == "admin":
+        if empresa_id is None:
+            restricao_dono = "" if ator.get("perfil") == "admin" else "AND h.usuario_id = ?"
+            parametros = (() if ator.get("perfil") == "admin" else (int(ator["id"]),))
+            registros = conexao.execute(
+                f"""
+                SELECT h.*, u.nome AS nome_usuario
+                FROM historico_analises h
+                LEFT JOIN usuarios u ON u.id = h.usuario_id
+                WHERE h.empresa_id IS NULL {restricao_dono}
+                  AND COALESCE(h.estado_registro, 'Ativo') = 'Ativo'
+                ORDER BY h.id DESC LIMIT ?
+                """,
+                (*parametros, limite),
+            ).fetchall()
+        elif ator.get("perfil") == "admin":
             registros = conexao.execute(
                 """
                 SELECT h.*, u.nome AS nome_usuario
                 FROM historico_analises h
                 LEFT JOIN usuarios u ON u.id = h.usuario_id
+                WHERE h.empresa_id = ?
+                  AND (h.filial_id = ? OR h.filial_id IS NULL)
+                  AND COALESCE(h.estado_registro, 'Ativo') = 'Ativo'
                 ORDER BY h.id DESC LIMIT ?
                 """,
-                (limite,),
+                (empresa_id, filial_id, limite),
             ).fetchall()
         else:
             registros = conexao.execute(
@@ -125,21 +192,39 @@ def listar_historico(ator: dict, limite: int = 200) -> list[dict]:
                 SELECT h.*, u.nome AS nome_usuario
                 FROM historico_analises h
                 LEFT JOIN usuarios u ON u.id = h.usuario_id
-                WHERE h.usuario_id = ?
+                WHERE h.usuario_id = ? AND h.empresa_id = ?
+                  AND (h.filial_id = ? OR h.filial_id IS NULL)
+                  AND COALESCE(h.estado_registro, 'Ativo') = 'Ativo'
                 ORDER BY h.id DESC LIMIT ?
                 """,
-                (int(ator["id"]), limite),
+                (int(ator["id"]), empresa_id, filial_id, limite),
             ).fetchall()
     return [dict(registro) for registro in registros]
 
 
 def obter_analise(historico_id: int, ator: dict) -> dict:
     inicializar_historico()
+    empresa_id, filial_id = _contexto_historico()
     with conectar() as conexao:
-        registro = conexao.execute(
-            "SELECT * FROM historico_analises WHERE id = ?",
-            (int(historico_id),),
-        ).fetchone()
+        if empresa_id is None:
+            registro = conexao.execute(
+                """
+                SELECT * FROM historico_analises
+                WHERE id=? AND empresa_id IS NULL
+                  AND COALESCE(estado_registro, 'Ativo')='Ativo'
+                """,
+                (int(historico_id),),
+            ).fetchone()
+        else:
+            registro = conexao.execute(
+                """
+                SELECT * FROM historico_analises
+                WHERE id=? AND empresa_id=?
+                  AND (filial_id=? OR filial_id IS NULL)
+                  AND COALESCE(estado_registro, 'Ativo')='Ativo'
+                """,
+                (int(historico_id), empresa_id, filial_id),
+            ).fetchone()
     if registro is None:
         raise ValueError("Registro de histórico não encontrado.")
     if ator.get("perfil") != "admin" and int(registro["usuario_id"]) != int(ator["id"]):
@@ -153,11 +238,53 @@ def excluir_analise(historico_id: int, ator: dict) -> None:
     registro = obter_analise(historico_id, ator)
     with conectar() as conexao:
         conexao.execute(
-            "DELETE FROM historico_analises WHERE id = ?",
-            (int(historico_id),),
+            """
+            UPDATE historico_analises
+            SET estado_registro='Lixeira', excluido_em=CURRENT_TIMESTAMP,
+                excluido_por=?
+            WHERE id=?
+            """,
+            (int(ator["id"]), int(historico_id)),
         )
     registrar_auditoria(
         "historico_excluido",
         usuario_id=int(ator["id"]),
         detalhes=f"historico_id={historico_id};dono={registro['usuario_id']}",
     )
+
+
+def excluir_analises(historico_ids, ator: dict) -> int:
+    """Move vários registros autorizados para a lixeira em uma transação.
+
+    Todos os IDs são validados antes da primeira alteração para evitar uma
+    exclusão parcial quando a seleção contém um registro fora do escopo do
+    usuário/empresa/filial atual.
+    """
+    ids = tuple(dict.fromkeys(int(item) for item in historico_ids))
+    if not ids:
+        return 0
+
+    registros = [obter_analise(item, ator) for item in ids]
+    placeholders = ",".join("?" for _ in ids)
+    with conectar() as conexao:
+        cursor = conexao.execute(
+            f"""
+            UPDATE historico_analises
+            SET estado_registro='Lixeira', excluido_em=CURRENT_TIMESTAMP,
+                excluido_por=?
+            WHERE id IN ({placeholders})
+              AND COALESCE(estado_registro, 'Ativo')='Ativo'
+            """,
+            (int(ator["id"]), *ids),
+        )
+        quantidade = int(cursor.rowcount or 0)
+
+    registrar_auditoria(
+        "historico_exclusao_multipla",
+        usuario_id=int(ator["id"]),
+        detalhes=(
+            f"quantidade={quantidade};ids={','.join(str(item) for item in ids)};"
+            f"donos={','.join(str(item['usuario_id']) for item in registros)}"
+        ),
+    )
+    return quantidade

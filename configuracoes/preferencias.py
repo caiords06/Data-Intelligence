@@ -6,10 +6,12 @@ import json
 import os
 import threading
 from pathlib import Path
+
+from core.caminhos import pasta_dados
 from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-STORAGE_DIR = BASE_DIR / "storage"
+STORAGE_DIR = pasta_dados()
 PREFERENCIAS_PATH = STORAGE_DIR / "preferencias.json"
 _LOCK = threading.RLock()
 

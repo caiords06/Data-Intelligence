@@ -1,4 +1,5 @@
 from pathlib import Path
+from contextlib import closing
 import sqlite3
 import tempfile
 import unittest
@@ -64,7 +65,7 @@ class EstabilizacaoV51Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as pasta_nome:
             pasta = Path(pasta_nome)
             caminho = pasta / "legado.db"
-            with sqlite3.connect(caminho) as conexao:
+            with closing(sqlite3.connect(caminho)) as conexao, conexao:
                 conexao.execute(
                     """
                     CREATE TABLE usuarios (

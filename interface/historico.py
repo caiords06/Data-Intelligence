@@ -12,8 +12,14 @@ from interface.tema import (
 )
 from auth.sessao import SESSAO
 from configuracoes.preferencias import obter_preferencia
-from historico.repositorio import excluir_analise, listar_historico, obter_analise
-from interface.componentes import criar_sidebar
+from historico.repositorio import excluir_analises, listar_historico, obter_analise
+from interface.componentes import (
+    AreaRolavel,
+    criar_cabecalho,
+    criar_estado_vazio,
+    criar_sidebar,
+    preparar_janela_secundaria,
+)
 
 
 class TelaHistorico:
@@ -34,25 +40,16 @@ class TelaHistorico:
             rodape_texto="←   Voltar ao início",
             rodape_comando=self.navegacao.get("inicio"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(side="left", fill="both", expand=True, padx=40, pady=32)
-
-        cabecalho = tk.Frame(conteudo, bg=CORES["bg"])
-        cabecalho.pack(fill="x")
-        tk.Label(
-            cabecalho,
-            text="Histórico de análises",
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            cabecalho,
-            text="Consulte resultados anteriores sem armazenar as planilhas originais.",
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(5, 22))
+        viewport = AreaRolavel(self.container)
+        viewport.pack(side="left", fill="both", expand=True, padx=40, pady=32)
+        conteudo = viewport.conteudo
+        criar_cabecalho(
+            conteudo,
+            "Histórico de análises",
+            "Consulte resultados anteriores sem armazenar as planilhas originais.",
+            breadcrumb="CENTRAL DA APLICAÇÃO  /  HISTÓRICO ANALÍTICO",
+            etiqueta="RASTREÁVEL V9.0",
+        )
 
         tabela_frame = tk.Frame(
             conteudo,
@@ -75,6 +72,7 @@ class TelaHistorico:
             columns=colunas,
             show="headings",
             style="Dark.Treeview",
+            selectmode="extended",
         )
         configuracoes = {
             "data": ("Data", 145),
@@ -93,39 +91,33 @@ class TelaHistorico:
             command=self.tabela.yview,
             style="Dark.Vertical.TScrollbar",
         )
-        self.tabela.configure(yscrollcommand=barra.set)
-        self.tabela.pack(side="left", fill="both", expand=True, padx=(16, 0), pady=16)
-        barra.pack(side="right", fill="y", padx=(0, 16), pady=16)
+        barra_horizontal = ttk.Scrollbar(
+            tabela_frame, orient="horizontal", command=self.tabela.xview,
+            style="Dark.Horizontal.TScrollbar",
+        )
+        self.tabela.configure(
+            yscrollcommand=barra.set, xscrollcommand=barra_horizontal.set
+        )
+        self.tabela.grid(row=0, column=0, sticky="nsew", padx=(16, 0), pady=(16, 0))
+        barra.grid(row=0, column=1, sticky="ns", padx=(0, 16), pady=(16, 0))
+        barra_horizontal.grid(row=1, column=0, sticky="ew", padx=(16, 0), pady=(0, 16))
+        tabela_frame.grid_rowconfigure(0, weight=1, minsize=310)
+        tabela_frame.grid_columnconfigure(0, weight=1)
         self.tabela.bind("<<TreeviewSelect>>", self._atualizar_estado_acoes)
+        self.tabela.bind("<Control-a>", self._selecionar_todos)
+        self.tabela.bind("<Control-A>", self._selecionar_todos)
+        self.tabela.bind("<Double-1>", self._abrir_detalhes_duplo_clique)
 
-        self.estado_vazio = tk.Frame(tabela_frame, bg=CORES["input"], padx=32, pady=20)
-        tk.Label(
-            self.estado_vazio,
-            text="◇",
-            font=("Segoe UI Symbol", 30),
-            fg=CORES["primary"],
-            bg=CORES["input"],
-        ).pack()
-        tk.Label(
-            self.estado_vazio,
-            text="Nenhuma análise registrada",
-            font=("Segoe UI", 13, "bold"),
-            fg=CORES["text"],
-            bg=CORES["input"],
-        ).pack(pady=(8, 4))
-        tk.Label(
-            self.estado_vazio,
-            text=(
-                "Quando o primeiro processamento for concluído, o resumo aparecerá aqui."
-            ),
-            font=("Segoe UI", 9),
-            fg=CORES["text_sec"],
-            bg=CORES["input"],
-        ).pack()
+        self.estado_vazio = criar_estado_vazio(
+            tabela_frame,
+            "◇",
+            "Nenhuma análise registrada",
+            "Quando o primeiro processamento for concluído, o resumo aparecerá aqui.",
+        )
         adicionar_divisorias_treeview(
             self.tabela,
             sobreposicao=self.estado_vazio,
-            )
+        )
         acoes = tk.Frame(conteudo, bg=CORES["bg"])
         acoes.pack(fill="x", pady=(14, 0))
         self._botao(acoes, "ATUALIZAR", self.carregar, secundario=True).pack(side="left")
@@ -146,7 +138,7 @@ class TelaHistorico:
         fundo = CORES["danger"] if perigo else (
             CORES["card_secundario"] if secundario else CORES["primary"]
         )
-        return tk.Button(
+        botao = tk.Button(
             parent,
             text=texto,
             command=comando,
@@ -160,7 +152,10 @@ class TelaHistorico:
             cursor="hand2",
             padx=14,
             pady=8,
+            disabledforeground=CORES["text_disabled"],
         )
+        botao._cor_normal = fundo
+        return botao
 
     def carregar(self):
         for item in self.tabela.get_children():
@@ -187,29 +182,71 @@ class TelaHistorico:
         if registros:
             self.estado_vazio.place_forget()
         else:
-            self.estado_vazio.place(relx=0.5, rely=0.54, anchor="center")
+            self.estado_vazio.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.estado_vazio.lift()
         self.status.configure(text=f"{len(registros)} análise(s) encontrada(s).")
         self._atualizar_estado_acoes()
 
     def _atualizar_estado_acoes(self, _evento=None):
-        estado = "normal" if self.tabela.selection() else "disabled"
-        self.botao_detalhes.configure(state=estado)
-        self.botao_excluir.configure(state=estado)
+        quantidade = len(self.tabela.selection())
+        # Detalhes é uma ação de item único. Em seleção múltipla ele fica
+        # visualmente apagado e não clicável; Excluir permanece disponível.
+        self._definir_estado_botao(self.botao_detalhes, quantidade == 1)
+        self._definir_estado_botao(self.botao_excluir, quantidade >= 1)
+        if quantidade > 1:
+            texto_status = (
+                f"{quantidade} análises selecionadas · exclusão múltipla disponível."
+            )
+        elif quantidade == 1:
+            texto_status = "1 análise selecionada."
+        else:
+            total = len(self.tabela.get_children())
+            texto_status = f"{total} análise(s) encontrada(s)."
+        self.status.configure(text=texto_status, fg=CORES["text_sec"])
+
+    @staticmethod
+    def _definir_estado_botao(botao, habilitado):
+        cor_normal = getattr(botao, "_cor_normal", CORES["card_secundario"])
+        botao.configure(
+            state="normal" if habilitado else "disabled",
+            bg=cor_normal if habilitado else CORES["input"],
+            fg="#FFFFFF" if habilitado else CORES["text_disabled"],
+            cursor="hand2" if habilitado else "arrow",
+        )
+
+    def _selecionar_todos(self, _evento=None):
+        itens = self.tabela.get_children()
+        if itens:
+            self.tabela.selection_set(itens)
+            self._atualizar_estado_acoes()
+        return "break"
+
+    def _abrir_detalhes_duplo_clique(self, _evento=None):
+        if len(self.tabela.selection()) == 1:
+            self.ver_detalhes()
 
     def _id_selecionado(self):
         selecao = self.tabela.selection()
         return int(selecao[0]) if selecao else None
 
+    def _ids_selecionados(self):
+        return tuple(int(item) for item in self.tabela.selection())
+
     def ver_detalhes(self):
-        historico_id = self._id_selecionado()
-        if historico_id is None:
-            self.status.configure(text="Selecione uma análise.", fg=CORES["warning"])
+        ids = self._ids_selecionados()
+        if len(ids) != 1:
+            self.status.configure(
+                text="Selecione somente uma análise para visualizar os detalhes.",
+                fg=CORES["warning"],
+            )
             return
+        historico_id = ids[0]
         registro = obter_analise(historico_id, SESSAO.usuario)
         janela = tk.Toplevel(self.root)
         janela.title(f"Detalhes da análise #{historico_id}")
-        janela.geometry("780x580")
+        preparar_janela_secundaria(
+            janela, self.root, 780, 580, minimo=(640, 460), modal=False
+        )
         janela.configure(bg=CORES["bg"])
         texto = ScrolledText(
             janela,
@@ -226,19 +263,32 @@ class TelaHistorico:
         texto.configure(state="disabled")
 
     def excluir(self):
-        historico_id = self._id_selecionado()
-        if historico_id is None:
-            self.status.configure(text="Selecione uma análise.", fg=CORES["warning"])
+        ids = self._ids_selecionados()
+        if not ids:
+            self.status.configure(text="Selecione ao menos uma análise.", fg=CORES["warning"])
             return
         confirmar = True
         if obter_preferencia("confirmar_exclusao_historico", True):
+            quantidade = len(ids)
+            descricao = (
+                "esta análise"
+                if quantidade == 1
+                else f"as {quantidade} análises selecionadas"
+            )
             confirmar = messagebox.askyesno(
                 "Excluir histórico",
-                "Deseja excluir somente este resumo de análise?",
+                f"Deseja mover {descricao} para a lixeira do histórico?",
                 parent=self.root,
             )
         if not confirmar:
             return
-        excluir_analise(historico_id, SESSAO.usuario)
+        quantidade = excluir_analises(ids, SESSAO.usuario)
         self.carregar()
-        self.status.configure(text="Registro excluído.", fg=CORES["success"])
+        self.status.configure(
+            text=(
+                "Registro excluído."
+                if quantidade == 1
+                else f"{quantidade} registros excluídos."
+            ),
+            fg=CORES["success"],
+        )

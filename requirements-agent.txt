@@ -1,0 +1,2 @@
+# Dependência runtime do Agente TI.
+psutil>=7.0,<8

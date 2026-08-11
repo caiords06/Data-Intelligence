@@ -1,0 +1,3 @@
+# Ferramentas usadas somente para validar e gerar a distribuição Windows.
+pyinstaller>=6.15,<7
+pytest>=8,<10

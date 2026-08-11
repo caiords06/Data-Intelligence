@@ -1,0 +1,8 @@
+Data Intelligence Enterprise Platform V9.1
+Autoridade Central Corporativa
+- operações transacionais dos módulos executadas no Servidor Corporativo
+- Central e Cliente não usam mais o SQLite local como fonte de verdade operacional
+- RPC restrito por allowlist, bearer e ator reconstituído no servidor
+- heartbeat do Agente TI unificado no Servidor Corporativo (porta 8770)
+- backup completo criado no servidor quando a estação está conectada
+- sem fallback silencioso para banco local quando o servidor está indisponível

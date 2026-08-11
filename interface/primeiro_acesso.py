@@ -25,7 +25,7 @@ class TelaPrimeiroAcesso:
 
     def criar_interface(self):
 
-        self.root.title("Data Intelligence · Configuração inicial · V7")
+        self.root.title("Data Intelligence · Configuração inicial · V9.0")
 
         self.container = tk.Frame(
             self.root,
@@ -41,7 +41,7 @@ class TelaPrimeiroAcesso:
             self.container,
             bg=self.cores["card"],
             width=440,
-            height=660,
+            height=720,
             highlightthickness=1,
             highlightbackground=self.cores["border"]
         )
@@ -103,6 +103,11 @@ class TelaPrimeiroAcesso:
         self.entry_usuario = self.criar_campo(
             card,
             "Usuário"
+        )
+
+        self.entry_email = self.criar_campo(
+            card,
+            "E-mail corporativo"
         )
 
         self.entry_senha = self.criar_campo(
@@ -260,7 +265,8 @@ class TelaPrimeiroAcesso:
             usuario = criar_admin_inicial(
                 self.entry_nome.get(),
                 self.entry_usuario.get(),
-                senha
+                senha,
+                self.entry_email.get() or None
             )
 
         except ValueError as erro:

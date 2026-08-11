@@ -1,0 +1,28 @@
+Data Intelligence Enterprise Platform V9.1 — Validação
+Data: 2026-08-11
+
+Validações executadas neste ambiente:
+- python -m compileall -q . : OK
+- python -m tabnanny ... : OK
+- testes focados em autoridade central + módulos críticos:
+  64 passed, 4 subtests passed
+- testes específicos da V9.1 após integração do heartbeat:
+  15 passed
+- smoke Tk V9:
+  3 passed, 18 subtests passed
+- smoke Tk ampliado executado anteriormente nesta mesma árvore:
+  13 passed, 70 subtests passed
+
+Coberturas específicas da V9.1:
+- POST /api/v1/rpc grava e lê no banco do servidor
+- RPC rejeita módulo/função fora da allowlist
+- ator fornecido pelo cliente não é usado como identidade efetiva
+- wrapper de módulo em estação remota não executa a função local
+- allowlist referencia somente funções existentes
+- Servidor Corporativo aceita heartbeat HMAC do Agente TI na porta corporativa
+- interface Estoque não executa mais SQL direto para a conferência de operação
+
+Observação:
+A autoridade transacional foi centralizada no Servidor Corporativo. O armazenamento
+operacional do servidor nesta entrega continua SQLite/WAL. A conversão completa do
+schema/dialeto para PostgreSQL não foi declarada concluída nem simulada.

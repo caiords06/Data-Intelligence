@@ -7,14 +7,19 @@ from datetime import datetime
 from uuid import uuid4
 
 from auth.banco import conectar
-from enterprise.contexto import garantir_contexto_sessao
+from enterprise.contexto import obter_escopo_ator
 
 
 STATUS_FINAIS = {"Concluído", "Falhou", "Cancelado"}
+STATUS_BLOQUEADORES = STATUS_FINAIS | {"Cancelamento solicitado"}
+
+
+def _escopo(ator):
+    return obter_escopo_ator(ator)
 
 
 def criar_job(tipo: str, titulo: str, ator: dict) -> dict:
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = _escopo(ator)
     codigo = f"JOB-{datetime.now():%Y%m%d}-{uuid4().hex[:8].upper()}"
     with conectar() as conexao:
         cursor = conexao.execute(
@@ -74,19 +79,23 @@ def falhar_job(job_id: int, ator: dict, erro: str) -> None:
 
 
 def solicitar_cancelamento(job_id: int, ator: dict) -> None:
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = _escopo(ator)
     with conectar() as conexao:
         cursor = conexao.execute(
             """
             UPDATE jobs
             SET cancelamento_solicitado = 1,
                 status = CASE
-                    WHEN status IN ('Pendente', 'Executando')
-                    THEN 'Cancelamento solicitado'
+                    WHEN status = 'Pendente' THEN 'Cancelado'
+                    WHEN status = 'Executando' THEN 'Cancelamento solicitado'
                     ELSE status
                 END,
-                mensagem = 'Cancelamento solicitado pelo usuário.'
-            WHERE id = ? AND empresa_id = ? AND filial_id = ?
+                mensagem = CASE WHEN status='Pendente'
+                    THEN 'Trabalho cancelado antes da execução.'
+                    ELSE 'Cancelamento solicitado pelo usuário.' END,
+                concluido_em = CASE WHEN status='Pendente'
+                    THEN CURRENT_TIMESTAMP ELSE concluido_em END
+            WHERE id = ? AND empresa_id = ? AND filial_id IS ?
               AND usuario_id = ?
             """,
             (int(job_id), empresa_id, filial_id, int(ator["id"])),
@@ -96,18 +105,41 @@ def solicitar_cancelamento(job_id: int, ator: dict) -> None:
 
 
 def cancelamento_solicitado(job_id: int, ator: dict) -> bool:
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = _escopo(ator)
     with conectar() as conexao:
         registro = conexao.execute(
             "SELECT cancelamento_solicitado FROM jobs "
-            "WHERE id = ? AND empresa_id = ? AND filial_id = ? AND usuario_id = ?",
+            "WHERE id = ? AND empresa_id = ? AND filial_id IS ? AND usuario_id = ?",
             (int(job_id), empresa_id, filial_id, int(ator["id"])),
         ).fetchone()
     return bool(registro and registro["cancelamento_solicitado"])
 
 
+
+def cancelar_job(job_id: int, ator: dict, mensagem: str = "Trabalho cancelado com segurança.") -> None:
+    """Confirma o cancelamento de um job sem classificá-lo como falha."""
+    empresa_id, filial_id = _escopo(ator)
+    with conectar() as conexao:
+        atual = conexao.execute(
+            "SELECT status FROM jobs WHERE id=? AND empresa_id=? AND filial_id IS ? AND usuario_id=?",
+            (int(job_id), empresa_id, filial_id, int(ator["id"])),
+        ).fetchone()
+        if atual is None:
+            raise ValueError("Job não encontrado.")
+        if atual["status"] in STATUS_FINAIS:
+            return
+        conexao.execute(
+            """
+            UPDATE jobs
+            SET status='Cancelado', cancelamento_solicitado=1,
+                mensagem=?, concluido_em=CURRENT_TIMESTAMP
+            WHERE id=? AND empresa_id=? AND filial_id IS ? AND usuario_id=?
+            """,
+            (str(mensagem)[:500], int(job_id), empresa_id, filial_id, int(ator["id"])),
+        )
+
 def listar_jobs(ator: dict, limite: int = 50) -> list[dict]:
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = _escopo(ator)
     administrador = str(ator.get("perfil", "")).lower() == "admin"
     filtro_usuario = "" if administrador else "AND usuario_id = ?"
     parametros = [empresa_id, filial_id]
@@ -118,7 +150,7 @@ def listar_jobs(ator: dict, limite: int = 50) -> list[dict]:
         registros = conexao.execute(
             f"""
             SELECT * FROM jobs
-            WHERE empresa_id = ? AND filial_id = ? {filtro_usuario}
+            WHERE empresa_id = ? AND filial_id IS ? {filtro_usuario}
             ORDER BY id DESC LIMIT ?
             """,
             parametros,
@@ -138,17 +170,29 @@ def _atualizar_job(
     iniciar=False,
     concluir=False,
 ):
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = _escopo(ator)
     progresso = None if progresso is None else max(0, min(100, int(progresso)))
     with conectar() as conexao:
         atual = conexao.execute(
-            "SELECT status FROM jobs WHERE id = ? AND empresa_id = ? "
-            "AND filial_id = ? AND usuario_id = ?",
+            "SELECT status, cancelamento_solicitado FROM jobs WHERE id = ? AND empresa_id = ? "
+            "AND filial_id IS ? AND usuario_id = ?",
             (int(job_id), empresa_id, filial_id, int(ator["id"])),
         ).fetchone()
         if atual is None:
             raise ValueError("Job não encontrado.")
         if atual["status"] in STATUS_FINAIS:
+            return
+        if atual["status"] == "Cancelamento solicitado" or atual["cancelamento_solicitado"]:
+            conexao.execute(
+                """
+                UPDATE jobs
+                SET status='Cancelado',
+                    mensagem='Trabalho cancelado com segurança.',
+                    concluido_em=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (int(job_id),),
+            )
             return
         conexao.execute(
             """
@@ -176,3 +220,8 @@ def _atualizar_job(
             ),
         )
 
+# V9.1: em estações Central/Cliente, as APIs transacionais permitidas acima
+# são executadas no Servidor Corporativo. No servidor/standalone permanecem locais.
+from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
+_instalar_proxy_modulo(globals(), __name__)
+del _instalar_proxy_modulo

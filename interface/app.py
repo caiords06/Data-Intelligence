@@ -16,10 +16,17 @@ from configuracoes.settings import (
     TEMPO_CARREGAMENTO_PAGINA,
     obter_link_validacao,
 )
-from core.orquestrador import OrquestradorAnalise, normalizar_configuracao
+from core.orquestrador import (
+        OrquestradorAnalise,
+        ProcessamentoCancelado,
+        normalizar_configuracao,
+)
+from dados.fontes import limpar_arquivo_temporario
 from enterprise.central import registrar_atividade_analytics
 from enterprise.jobs import (
         atualizar_job,
+        cancelamento_solicitado,
+        cancelar_job,
         concluir_job,
         criar_job,
         falhar_job,
@@ -29,7 +36,8 @@ from historico.repositorio import registrar_analise
 from sistema.idbrowser import identificar_tipo_navegador, localizar_navegador_padrao
 from sistema.iduser import identificar_usuario
 from sistema.opsystemcheck import verificar_sistema_operacional
-from interface.tema import CORES, LAYOUT
+from interface.tema import CORES
+from interface.navegacao_analytics import criar_sidebar_analytics
 
 
 class AplicacaoAutomacao:
@@ -55,6 +63,9 @@ class AplicacaoAutomacao:
                 self.fila_ui = queue.Queue()
                 self.arquivo_selecionado = None
                 self.arquivos_selecionados = []
+                self.arquivos_temporarios = set(
+                        self.configuracao_analise.get("arquivos_temporarios") or ()
+                )
                 self.resultados_arquivos = []
                 self.df_consolidado = None
                 self.classificacao_atual = None
@@ -70,12 +81,15 @@ class AplicacaoAutomacao:
                 self.categoria_atual = "desconhecida"
                 self.dashboard_config = {}
                 self.job_id = None
+                self.cancel_event = threading.Event()
+                self.worker_thread = None
+                self.ator_execucao = dict(SESSAO.usuario or {})
+                self.ator_execucao["_empresa_id"] = SESSAO.empresa_id
+                self.ator_execucao["_filial_id"] = SESSAO.filial_id
                 self.dataframe_inicial = dataframe_inicial
                 self.nome_fonte_empresarial = nome_fonte_empresarial
 
-                self.root.title("Data Intelligence · Dashboard analítico · V7")
-                self.root.geometry("1440x900")
-                self.root.minsize(1180, 740)
+                self.root.title("Data Intelligence · Dashboard analítico · V9.0")
 
                 self.criar_interface()
                 self.processar_logs()
@@ -118,16 +132,7 @@ class AplicacaoAutomacao:
                 )
 
                 self.root.title(
-                        "Data Intelligence · Dashboard analítico"
-                )
-
-                self.root.geometry(
-                        "1440x900"
-                )
-
-                self.root.minsize(
-                        1180,
-                        740
+                        "Data Intelligence · Dashboard analítico · V9.0"
                 )
 
                 # ==========================================================
@@ -177,234 +182,34 @@ class AplicacaoAutomacao:
                 )
 
                 # ==========================================================
-                # SIDEBAR
+                # SIDEBAR ANALYTICS ÚNICA
                 # ==========================================================
 
-                sidebar = tk.Frame(
+                # O dashboard de resultados usava um menu próprio. Ao abrir
+                # Explorar dados, Relatórios ou Visualizações a aplicação
+                # reconstruía a sidebar com outro conjunto de itens. Todas as
+                # páginas analíticas passam agora pelo mesmo componente.
+                navegacao_sidebar = dict(self.navegacao)
+                navegacao_sidebar["analytics_secao"] = self._navegar_secao_analytics
+                for destino in (
+                        "nova",
+                        "perfis",
+                        "inicio",
+                        "modulos",
+                        "historico",
+                        "aprovacoes",
+                        "configuracoes",
+                        "usuarios",
+                ):
+                        if self.navegacao.get(destino) is not None:
+                                navegacao_sidebar[destino] = (
+                                        lambda alvo=destino: self._navegar(alvo)
+                                )
+                criar_sidebar_analytics(
                         container,
-                        bg=self.cores["sidebar"],
-                        width=LAYOUT["sidebar_largura"]
-                )
-
-                sidebar.pack(
-                        side="left",
-                        fill="y"
-                )
-
-                sidebar.pack_propagate(
-                        False
-                )
-
-                # ----------------------------------------------------------
-                # LOGO / NOME
-                # ----------------------------------------------------------
-
-                logo_area = tk.Frame(
-                        sidebar,
-                        bg=self.cores["sidebar"]
-                )
-
-                logo_area.pack(
-                        fill="x",
-                        padx=28,
-                        pady=(25, 30)
-                )
-
-                tk.Label(
-                        logo_area,
-                        text="◇",
-                        font=("Segoe UI", 22, "bold"),
-                        fg=self.cores["primary"],
-                        bg=self.cores["sidebar"]
-                ).pack(
-                        side="left"
-                )
-
-                logo_texto = tk.Frame(
-                        logo_area,
-                        bg=self.cores["sidebar"]
-                )
-
-                logo_texto.pack(
-                        side="left",
-                        padx=(10, 0)
-                )
-
-                tk.Label(
-                        logo_texto,
-                        text="Data Intelligence",
-                        font=("Segoe UI", 12, "bold"),
-                        fg=self.cores["text"],
-                        bg=self.cores["sidebar"]
-                ).pack(
-                        anchor="w"
-                )
-
-                tk.Label(
-                        logo_texto,
-                        text="ENTERPRISE ANALYTICS",
-                        font=("Segoe UI", 8),
-                        fg=self.cores["text_sec"],
-                        bg=self.cores["sidebar"]
-                ).pack(
-                        anchor="w"
-                )
-
-                # ----------------------------------------------------------
-                # MENU
-                # ----------------------------------------------------------
-
-                self.criar_menu_item(
-                        sidebar,
-                        "◈",
-                        "Dashboard analítico",
-                        ativo=True,
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "▣",
-                        "Explorar dados",
-                        lambda: self.mostrar_previa("Explorar dados"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "▤",
-                        "Relatórios",
-                        lambda: self.mostrar_previa("Central de relatórios"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "▥",
-                        "Visualizações",
-                        lambda: self.mostrar_previa("Galeria de visualizações"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "◇",
-                        "Modelos",
-                        lambda: self.mostrar_previa("Modelos analíticos"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "⌂",
-                        "Início",
-                        lambda: self._navegar("inicio"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "▦",
-                        "Módulos",
-                        lambda: self._navegar("modulos"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "◷",
-                        "Histórico",
-                        lambda: self._navegar("historico"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "✓",
-                        "Aprovações",
-                        lambda: self._navegar("aprovacoes"),
-                )
-
-                self.criar_menu_item(
-                        sidebar,
-                        "⚙",
-                        "Configurações",
-                        lambda: self._navegar("configuracoes"),
-                )
-
-                if SESSAO.eh_admin():
-                        self.criar_menu_item(
-                                sidebar,
-                                "♙",
-                                "Usuários",
-                                lambda: self._navegar("usuarios"),
-                        )
-
-                # ----------------------------------------------------------
-                # ESPAÇAMENTO
-                # ----------------------------------------------------------
-
-                tk.Frame(
-                        sidebar,
-                        bg=self.cores["sidebar"]
-                ).pack(
-                        fill="both",
-                        expand=True
-                )
-
-                # ----------------------------------------------------------
-                # BOTÃO EXECUTAR
-                # ----------------------------------------------------------
-
-                botao_executar = tk.Button(
-                        sidebar,
-                        text="▶  VALIDAR AUTOMAÇÃO WEB",
-                        command=self.iniciar_automacao,
-                        font=("Segoe UI", 9, "bold"),
-                        bg=self.cores["primary"],
-                        fg="#FFFFFF",
-                        activebackground="#0EA5E9",
-                        activeforeground="#FFFFFF",
-                        relief="flat",
-                        bd=0,
-                        cursor="hand2",
-                        padx=10,
-                        pady=12
-                )
-
-                botao_executar.pack(
-                        fill="x",
-                        padx=15,
-                        pady=(10, 8)
-                )
-
-                self.botao_iniciar = botao_executar
-
-                # ----------------------------------------------------------
-                # STATUS SIDEBAR
-                # ----------------------------------------------------------
-
-                status_sidebar = tk.Frame(
-                        sidebar,
-                        bg=self.cores["sidebar"]
-                )
-
-                status_sidebar.pack(
-                        fill="x",
-                        padx=20,
-                        pady=(5, 20)
-                )
-
-                tk.Label(
-                        status_sidebar,
-                        text="●",
-                        font=("Segoe UI", 9),
-                        fg=self.cores["success"],
-                        bg=self.cores["sidebar"]
-                ).pack(
-                        side="left"
-                )
-
-                tk.Label(
-                        status_sidebar,
-                        text=" Sistema pronto",
-                        font=("Segoe UI", 8),
-                        fg=self.cores["text_sec"],
-                        bg=self.cores["sidebar"]
-                ).pack(
-                        side="left"
+                        navegacao_sidebar,
+                        ativo="visao",
+                        voltar=lambda: self._navegar("modulos"),
                 )
 
                 # ==========================================================
@@ -479,6 +284,26 @@ class AplicacaoAutomacao:
                 status_area.pack(
                         side="right"
                 )
+
+                # A validação web continua disponível, mas deixa de fazer
+                # parte da navegação. Assim a sidebar permanece idêntica em
+                # todas as telas do contexto analítico.
+                self.botao_iniciar = tk.Button(
+                        header,
+                        text="▶  VALIDAR AUTOMAÇÃO WEB",
+                        command=self.iniciar_automacao,
+                        font=("Segoe UI", 8, "bold"),
+                        bg=self.cores["primary"],
+                        fg="#FFFFFF",
+                        activebackground=self.cores["primary_hover"],
+                        activeforeground="#FFFFFF",
+                        relief="flat",
+                        bd=0,
+                        cursor="hand2",
+                        padx=11,
+                        pady=8,
+                )
+                self.botao_iniciar.pack(side="right", padx=(0, 10))
 
                 tk.Label(
                         status_area,
@@ -865,14 +690,6 @@ class AplicacaoAutomacao:
 
                 return frame
 
-        def mostrar_previa(self, recurso):
-                messagebox.showinfo(
-                        recurso,
-                        "A interface deste recurso faz parte da remodelação V7. "
-                        "O backend será conectado na próxima etapa.",
-                        parent=self.root,
-                )
-
         def criar_card(self, parent, titulo, valor, icone):
 
                 card = tk.Frame(
@@ -1015,11 +832,11 @@ class AplicacaoAutomacao:
                 self.adicionar_log("INÍCIO DA AUTOMAÇÃO WEB")
                 self.adicionar_log("=" * 40)
 
-                thread = threading.Thread(
+                self.worker_thread = threading.Thread(
                         target=self.executar_processo,
                         daemon=True,
                 )
-                thread.start()
+                self.worker_thread.start()
 
         def executar_processo(self):
                 driver = None
@@ -1152,12 +969,22 @@ class AplicacaoAutomacao:
                                 self.driver_selenium = None
 
         def encerrar_aplicacao(self):
+                self.cancel_event.set()
+                if self.processando:
+                        self._cancelar_job_analise("Aplicação encerrada pelo usuário.")
                 if self.after_logs_id is not None:
                         try:
                                 self.root.after_cancel(self.after_logs_id)
                         except tk.TclError:
                                 pass
                 self._encerrar_driver_selenium()
+                worker = self.worker_thread
+                if (
+                        worker is not None
+                        and worker.is_alive()
+                        and worker is not threading.current_thread()
+                ):
+                        worker.join(timeout=1.5)
                 self.root.destroy()
 
         def _navegar(self, destino):
@@ -1180,30 +1007,72 @@ class AplicacaoAutomacao:
                         self.container.destroy()
                 callback()
 
+        def _navegar_secao_analytics(self, secao):
+                if self.processando:
+                        self.adicionar_log(
+                                "[INFO] Aguarde o processamento terminar antes de mudar de tela."
+                        )
+                        return
+                callback = self.navegacao.get("analytics_secao")
+                if callback is None:
+                        return
+                self._finalizar_tela_para_navegacao()
+                callback(secao)
+
+        def _navegar_ferramenta(self, ferramenta):
+                if self.processando:
+                        self.adicionar_log(
+                                "[INFO] Aguarde o processamento terminar antes de mudar de tela."
+                        )
+                        return
+                callback = self.navegacao.get("ferramenta")
+                if callback is None:
+                        return
+                self._finalizar_tela_para_navegacao()
+                callback(ferramenta)
+
+        def _finalizar_tela_para_navegacao(self):
+                if self.after_logs_id is not None:
+                        try:
+                                self.root.after_cancel(self.after_logs_id)
+                        except tk.TclError:
+                                pass
+                        self.after_logs_id = None
+                self._encerrar_driver_selenium()
+                if self.container.winfo_exists():
+                        self.container.destroy()
+
         # ==========================================================
         # ATUALIZAÇÃO DO DASHBOARD
         # ==========================================================
 
         @staticmethod
-        def _moeda_br(valor):
+        def _numero_seguro(valor):
+                try:
+                        return float(valor or 0)
+                except (TypeError, ValueError):
+                        return 0.0
+
+        @classmethod
+        def _moeda_br(cls, valor):
                 return (
-                        f"R$ {float(valor):,.2f}"
+                        f"R$ {cls._numero_seguro(valor):,.2f}"
                         .replace(",", "X")
                         .replace(".", ",")
                         .replace("X", ".")
                 )
 
-        @staticmethod
-        def _numero_br(valor):
-                return f"{int(float(valor)):,}".replace(",", ".")
+        @classmethod
+        def _numero_br(cls, valor):
+                return f"{int(cls._numero_seguro(valor)):,}".replace(",", ".")
 
-        @staticmethod
-        def _decimal_br(valor):
-                return f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        @classmethod
+        def _decimal_br(cls, valor):
+                return f"{cls._numero_seguro(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-        @staticmethod
-        def _percentual_br(valor):
-                return f"{float(valor):.1f}%".replace(".", ",")
+        @classmethod
+        def _percentual_br(cls, valor):
+                return f"{cls._numero_seguro(valor):.1f}%".replace(".", ",")
 
         def configurar_dashboard_categoria(self, categoria):
                 self.categoria_atual = categoria or "desconhecida"
@@ -1491,13 +1360,13 @@ class AplicacaoAutomacao:
         def atualizar_progresso_motor(self, valor, mensagem):
                 # Reserva os 10% finais para uma transição visual progressiva.
                 valor_visual = min(90, int(float(valor) * 0.90))
-                if self.job_id is not None and SESSAO.autenticado():
+                if self.job_id is not None and self.ator_execucao.get("id"):
                         try:
                                 atualizar_job(
                                         self.job_id,
                                         valor_visual,
                                         mensagem,
-                                        SESSAO.usuario,
+                                        self.ator_execucao,
                                 )
                         except (RuntimeError, ValueError):
                                 pass
@@ -1514,24 +1383,24 @@ class AplicacaoAutomacao:
         # ==========================================================
 
         def _criar_job_analise(self, titulo):
-                if not SESSAO.autenticado():
+                if not self.ator_execucao.get("id"):
                         self.job_id = None
                         return
                 try:
-                        job = criar_job("analise", titulo, SESSAO.usuario)
+                        job = criar_job("analise", titulo, self.ator_execucao)
                         self.job_id = job["id"]
-                        iniciar_job(self.job_id, SESSAO.usuario)
+                        iniciar_job(self.job_id, self.ator_execucao)
                         self.adicionar_log(f"[JOB] {job['codigo']}")
                 except (RuntimeError, ValueError):
                         self.job_id = None
 
         def _concluir_job_analise(self, resultado):
-                if self.job_id is None or not SESSAO.autenticado():
+                if self.job_id is None or not self.ator_execucao.get("id"):
                         return
                 universais = (resultado.get("indicadores") or {}).get("universais") or {}
                 concluir_job(
                         self.job_id,
-                        SESSAO.usuario,
+                        self.ator_execucao,
                         {
                                 "categoria": resultado.get("categoria"),
                                 "total_registros": universais.get("total_registros"),
@@ -1542,12 +1411,37 @@ class AplicacaoAutomacao:
                 )
 
         def _falhar_job_analise(self, erro):
-                if self.job_id is None or not SESSAO.autenticado():
+                if self.job_id is None or not self.ator_execucao.get("id"):
                         return
                 try:
-                        falhar_job(self.job_id, SESSAO.usuario, str(erro))
+                        falhar_job(self.job_id, self.ator_execucao, str(erro))
                 except (RuntimeError, ValueError):
                         pass
+
+        def _cancelar_job_analise(self, mensagem="Cancelado pelo usuário."):
+                if self.job_id is None or not self.ator_execucao.get("id"):
+                        return
+                try:
+                        cancelar_job(
+                                self.job_id,
+                                self.ator_execucao,
+                                mensagem,
+                        )
+                except (RuntimeError, ValueError):
+                        pass
+
+        def _cancelamento_requisitado(self):
+                if self.cancel_event.is_set():
+                        return True
+                if self.job_id is None or not self.ator_execucao.get("id"):
+                        return False
+                try:
+                        return cancelamento_solicitado(
+                                self.job_id,
+                                self.ator_execucao,
+                        )
+                except (RuntimeError, ValueError):
+                        return False
 
         def carregar_arquivos_configurados(self, caminhos):
                 if not caminhos:
@@ -1572,9 +1466,15 @@ class AplicacaoAutomacao:
                         caminhos = filedialog.askopenfilenames(
                                 title="Selecionar planilhas",
                                 filetypes=[
-                                        ("Planilhas", "*.xlsx *.xls *.csv"),
+                                        (
+                                                "Dados suportados",
+                                                "*.xlsx *.xls *.csv *.json *.parquet *.txt",
+                                        ),
                                         ("Excel", "*.xlsx *.xls"),
                                         ("CSV", "*.csv"),
+                                        ("JSON", "*.json"),
+                                        ("Parquet", "*.parquet"),
+                                        ("Texto delimitado", "*.txt"),
                                         ("Todos os arquivos", "*.*"),
                                 ],
                         )
@@ -1605,12 +1505,13 @@ class AplicacaoAutomacao:
                 self._criar_job_analise(f"Análise · {nome_fonte}")
                 self.progresso.configure(value=0)
                 self.status.set("Preparando dados do módulo...")
-                thread = threading.Thread(
+                self.cancel_event.clear()
+                self.worker_thread = threading.Thread(
                         target=self._processar_dataframe_thread,
                         args=(dataframe.copy(deep=True), str(nome_fonte)),
                         daemon=True,
                 )
-                thread.start()
+                self.worker_thread.start()
 
         def _iniciar_processamento(self, caminhos, substituir=True):
                 if self.processando:
@@ -1641,12 +1542,13 @@ class AplicacaoAutomacao:
                 self.progresso.configure(value=0)
                 self.status.set("Preparando análise...")
 
-                thread = threading.Thread(
+                self.cancel_event.clear()
+                self.worker_thread = threading.Thread(
                         target=self._processar_analise_thread,
                         args=(list(self.arquivos_selecionados),),
                         daemon=True,
                 )
-                thread.start()
+                self.worker_thread.start()
 
         def _processar_analise_thread(self, caminhos):
                 try:
@@ -1654,6 +1556,7 @@ class AplicacaoAutomacao:
                         orquestrador = OrquestradorAnalise(
                                 logger=self.adicionar_log,
                                 progresso=self.atualizar_progresso_motor,
+                                cancelar=self._cancelamento_requisitado,
                         )
                         resultado = orquestrador.processar(
                                 caminhos,
@@ -1675,6 +1578,10 @@ class AplicacaoAutomacao:
                                 )
                                 passos = 9
                                 for indice in range(passos):
+                                        if self._cancelamento_requisitado():
+                                                raise ProcessamentoCancelado(
+                                                        "Processamento cancelado com segurança."
+                                                )
                                         time.sleep(restante / passos)
                                         self.atualizar_status_e_progresso(
                                                 91 + indice,
@@ -1685,6 +1592,9 @@ class AplicacaoAutomacao:
                                 self._processamento_concluido,
                                 resultado,
                         )
+                except ProcessamentoCancelado as erro:
+                        self._cancelar_job_analise(str(erro))
+                        self.executar_na_ui(self._processamento_cancelado)
                 except Exception as erro:
                         self._falhar_job_analise(erro)
                         mensagem = str(erro)
@@ -1694,6 +1604,10 @@ class AplicacaoAutomacao:
                                 mensagem,
                                 traceback_completo,
                         )
+                finally:
+                        for caminho in tuple(self.arquivos_temporarios):
+                                limpar_arquivo_temporario(caminho)
+                        self.arquivos_temporarios.clear()
 
         def _processar_dataframe_thread(self, dataframe, nome_fonte):
                 try:
@@ -1701,6 +1615,7 @@ class AplicacaoAutomacao:
                         orquestrador = OrquestradorAnalise(
                                 logger=self.adicionar_log,
                                 progresso=self.atualizar_progresso_motor,
+                                cancelar=self._cancelamento_requisitado,
                         )
                         resultado = orquestrador.processar_dataframe(
                                 dataframe,
@@ -1719,6 +1634,10 @@ class AplicacaoAutomacao:
                         restante = max(0.0, atraso_minimo - (time.monotonic() - inicio))
                         if restante:
                                 for indice in range(9):
+                                        if self._cancelamento_requisitado():
+                                                raise ProcessamentoCancelado(
+                                                        "Processamento cancelado com segurança."
+                                                )
                                         time.sleep(restante / 9)
                                         self.atualizar_status_e_progresso(
                                                 91 + indice,
@@ -1726,6 +1645,9 @@ class AplicacaoAutomacao:
                                         )
                         self._concluir_job_analise(resultado)
                         self.executar_na_ui(self._processamento_concluido, resultado)
+                except ProcessamentoCancelado as erro:
+                        self._cancelar_job_analise(str(erro))
+                        self.executar_na_ui(self._processamento_cancelado)
                 except Exception as erro:
                         self._falhar_job_analise(erro)
                         self.executar_na_ui(
@@ -1745,11 +1667,13 @@ class AplicacaoAutomacao:
                 self.analise_temporal = resultado.get("temporal")
                 self.relatorio_tratamento = resultado.get("tratamento")
 
-                if SESSAO.usuario:
+                if self.ator_execucao.get("id"):
                         try:
                                 historico_id = registrar_analise(
                                         resultado,
-                                        SESSAO.usuario["id"],
+                                        self.ator_execucao["id"],
+                                        empresa_id=self.ator_execucao.get("_empresa_id"),
+                                        filial_id=self.ator_execucao.get("_filial_id"),
                                 )
                                 self.adicionar_log(
                                         f"[OK] Análise registrada no histórico #{historico_id}."
@@ -1757,7 +1681,7 @@ class AplicacaoAutomacao:
                                 registrar_atividade_analytics(
                                         historico_id,
                                         resultado.get("categoria") or "desconhecida",
-                                        SESSAO.usuario,
+                                        self.ator_execucao,
                                 )
                         except Exception as erro:
                                 self.adicionar_log(
@@ -1789,9 +1713,18 @@ class AplicacaoAutomacao:
                         self.status.set("Análise concluída com sucesso.")
                 self.progresso.configure(value=100)
                 self.processando = False
+                self.job_id = None
+
+        def _processamento_cancelado(self):
+                self.processando = False
+                self.job_id = None
+                self.progresso.configure(value=0)
+                self.status.set("Processamento cancelado com segurança.")
+                self.adicionar_log("[CANCELADO] A operação foi interrompida.")
 
         def _processamento_falhou(self, mensagem, traceback_completo):
                 self.processando = False
+                self.job_id = None
                 self.adicionar_log("[ERRO AO PROCESSAR ARQUIVOS]")
                 self.adicionar_log(mensagem)
                 self.adicionar_log(traceback_completo)
@@ -1801,6 +1734,17 @@ class AplicacaoAutomacao:
                 self.lista_arquivos.delete(0, tk.END)
                 for caminho in self.arquivos_selecionados:
                         self.lista_arquivos.insert(tk.END, Path(caminho).name)
+                quantidade = len(self.arquivos_selecionados)
+                if quantidade:
+                        self.label_arquivo.configure(
+                                text=(
+                                        f"{quantidade} arquivo selecionado"
+                                        if quantidade == 1
+                                        else f"{quantidade} arquivos selecionados"
+                                )
+                        )
+                else:
+                        self.label_arquivo.configure(text="Nenhum arquivo selecionado")
 
 
 # ==============================================================

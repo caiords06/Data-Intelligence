@@ -1,6 +1,6 @@
 """Design system compartilhado da plataforma empresarial.
 
-O front-end V7 permanece em Tkinter para preservar compatibilidade com o
+O front-end V8 permanece em Tkinter para preservar compatibilidade com o
 backend atual, mas concentra cores, tipografia, espaçamento e estilos ttk em
 um único lugar. Isso evita que cada tela crie uma identidade própria.
 """
@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 
 
-VERSAO_INTERFACE = "V7"
+VERSAO_INTERFACE = "V9.0"
 
 CORES = {
     # Estrutura
@@ -52,7 +52,7 @@ CORES = {
 }
 
 LAYOUT = {
-    "sidebar_largura": 258,
+    "sidebar_largura": 244,
     "conteudo_padx": 34,
     "conteudo_pady": 28,
     "card_padx": 22,
@@ -68,7 +68,7 @@ FONTES = {
     "subtitulo": ("Segoe UI", 11, "bold"),
     "texto": ("Segoe UI", 10),
     "texto_pequeno": ("Segoe UI", 9),
-    "micro": ("Segoe UI", 8),
+    "micro": ("Segoe UI", 9),
     "destaque": ("Segoe UI", 10, "bold"),
     "numero": ("Segoe UI", 19, "bold"),
 }
@@ -190,60 +190,30 @@ def configurar_estilos_ttk(root=None):
 
 
 def adicionar_divisorias_treeview(tabela, *, cor=None, sobreposicao=None):
-    """Desenha separadores verticais estáveis entre colunas do Treeview."""
-    cor_linha = cor or CORES["divider"]
-    linhas: list[tk.Frame] = []
-    agendamento = {"id": None}
+    """Compatibilidade para grids legados sem sobrepor linhas artificiais.
 
-    def _limpar():
-        for linha in linhas[:]:
-            try:
-                linha.destroy()
-            except tk.TclError:
-                pass
-        linhas.clear()
+    O Treeview não oferece divisórias verticais de célula nativas. As versões
+    anteriores simulavam essas linhas com Frames posicionados sobre o widget;
+    em DPI, resize e scroll horizontal elas inevitavelmente se deslocavam.
+    A V9 remove a sobreposição e usa contraste de cabeçalho, seleção e linhas
+    alternadas. Isso elimina a principal fonte de colunas visualmente tortas.
 
-    def _desenhar():
-        agendamento["id"] = None
+    A função continua retornando um callback para manter compatibilidade com
+    telas antigas que armazenam o retorno.
+    """
+    try:
+        tabela.configure(takefocus=True)
+        if sobreposicao is not None and sobreposicao.winfo_exists():
+            sobreposicao.lift()
+    except tk.TclError:
+        pass
+
+    def redesenhar(_evento=None, atraso=0):
         try:
-            if not tabela.winfo_exists() or not tabela.winfo_ismapped():
-                return
-            tabela.update_idletasks()
-            _limpar()
-            largura = tabela.winfo_width()
-            altura = tabela.winfo_height()
-            if largura <= 2 or altura <= 2:
-                return
-            pai = tabela.master
-            x = tabela.winfo_rootx() - pai.winfo_rootx()
-            y = tabela.winfo_rooty() - pai.winfo_rooty()
-            acumulado = 0
-            for coluna in tuple(tabela.cget("columns"))[:-1]:
-                acumulado += int(tabela.column(coluna, "width"))
-                posicao = x + acumulado
-                if posicao >= x + largura:
-                    break
-                linha = tk.Frame(pai, bg=cor_linha, bd=0, highlightthickness=0)
-                linha.place(x=posicao, y=y, width=1, height=altura)
-                linha.lift()
-                linhas.append(linha)
             if sobreposicao is not None and sobreposicao.winfo_exists():
                 sobreposicao.lift()
         except tk.TclError:
-            _limpar()
+            pass
 
-    def redesenhar(_evento=None, atraso=30):
-        try:
-            if agendamento["id"] is not None:
-                tabela.after_cancel(agendamento["id"])
-            agendamento["id"] = tabela.after(max(0, int(atraso)), _desenhar)
-        except tk.TclError:
-            return
-
-    for evento in ("<Configure>", "<Map>", "<Expose>", "<ButtonRelease-1>"):
-        tabela.bind(evento, redesenhar, add="+")
-    tabela.master.bind("<Configure>", redesenhar, add="+")
-    tabela.after_idle(lambda: redesenhar(atraso=0))
-    tabela.after(90, redesenhar)
-    tabela.after(240, redesenhar)
     return redesenhar
+

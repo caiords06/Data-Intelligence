@@ -1,4 +1,4 @@
-"""Contratos estruturais do novo front-end V7 sem depender de display gráfico."""
+"""Contratos estruturais do front-end V8 sem depender de display gráfico."""
 
 import unittest
 
@@ -6,11 +6,12 @@ from enterprise.catalogo import ORDEM_MODULOS
 from interface.central_analytics import MENU_ANALYTICS
 from interface.componentes import ITENS_NAVEGACAO
 from interface.configuracao_modulos_ui import PAINEIS_MODULOS
+from interface.imagens import abrir_imagem, caminho_asset
 from interface.nova_analise import CATEGORIAS, FONTES_DADOS
 from interface.tema import CORES, VERSAO_INTERFACE
 
 
-class InterfaceV7Tests(unittest.TestCase):
+class InterfaceV8Tests(unittest.TestCase):
     def test_todos_departamentos_possuem_painel_especifico(self):
         departamentos = set(ORDEM_MODULOS) - {"analytics"}
         self.assertEqual(set(PAINEIS_MODULOS), departamentos)
@@ -32,31 +33,48 @@ class InterfaceV7Tests(unittest.TestCase):
         self.assertNotIn("analytics", chaves)
         self.assertNotIn("nova", chaves)
 
-    def test_central_analytics_expoe_recursos_futuros(self):
+    def test_central_analytics_expoe_recursos_funcionais(self):
         chaves = {item[0] for item in MENU_ANALYTICS}
         self.assertTrue(
             {"visao", "nova", "importacoes", "relatorios", "agendamentos", "modelos", "assistente"}
             <= chaves
         )
 
-    def test_nova_analise_distingue_fontes_funcionais_e_previas(self):
+    def test_nova_analise_expoe_fontes_funcionais(self):
         fontes = {nome: funcional for nome, _icone, _descricao, funcional in FONTES_DADOS}
-        self.assertTrue(fontes["Computador"])
-        self.assertFalse(fontes["Google Drive"])
-        self.assertFalse(fontes["OneDrive"])
-        self.assertFalse(fontes["Banco de dados"])
-        self.assertFalse(fontes["URL"])
+        self.assertTrue(all(fontes.values()))
         self.assertIn("Recursos Humanos", CATEGORIAS)
         self.assertIn("Jurídico", CATEGORIAS)
 
     def test_design_system_possui_estados_acessiveis(self):
-        self.assertEqual(VERSAO_INTERFACE, "V7")
+        self.assertEqual(VERSAO_INTERFACE, "V9.0")
         for chave in (
             "bg", "sidebar", "card", "input", "border", "text", "text_sec",
             "primary", "success", "warning", "danger",
         ):
             self.assertIn(chave, CORES)
             self.assertRegex(CORES[chave], r"^#[0-9A-Fa-f]{6}$")
+
+    def test_login_possui_representacao_visual_local(self):
+        caminhos = (
+            caminho_asset("backgrounds/login_background_v7.png"),
+            caminho_asset("illustrations/login_ecossistema_transparente_v8.png"),
+        )
+        for caminho in caminhos:
+            with self.subTest(ativo=caminho.name):
+                self.assertTrue(caminho.is_file())
+                self.assertGreater(caminho.stat().st_size, 100_000)
+                with caminho.open("rb") as arquivo:
+                    self.assertEqual(arquivo.read(8), b"\x89PNG\r\n\x1a\n")
+
+        ecossistema = abrir_imagem(
+            "illustrations/login_ecossistema_transparente_v8.png"
+        )
+        self.assertIsNotNone(ecossistema)
+        self.assertEqual(ecossistema.mode, "RGBA")
+        alfa_minimo, alfa_maximo = ecossistema.getchannel("A").getextrema()
+        self.assertEqual(alfa_minimo, 0)
+        self.assertEqual(alfa_maximo, 255)
 
 
 if __name__ == "__main__":

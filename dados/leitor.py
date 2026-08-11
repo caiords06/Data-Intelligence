@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from pandas.api import types as tipos_pd
 
 from dados.periodos import identificar_periodo
 
-EXTENSOES_PERMITIDAS = {".xlsx", ".xls", ".csv"}
+EXTENSOES_PERMITIDAS = {".xlsx", ".xls", ".csv", ".json", ".parquet", ".txt"}
+LIMITE_ARQUIVO_LOCAL_BYTES = 100 * 1024 * 1024
 COLUNAS_ORIGEM = (
     "arquivo_origem",
     "periodo_origem",
@@ -27,7 +29,15 @@ def validar_arquivo(caminho: str | Path) -> Path:
     if not caminho.is_file():
         raise ValueError("O caminho informado não corresponde a um arquivo.")
     if caminho.suffix.lower() not in EXTENSOES_PERMITIDAS:
-        raise ValueError("Formato não suportado. Utilize XLSX, XLS ou CSV.")
+        raise ValueError(
+            "Formato não suportado. Utilize XLSX, XLS, CSV, JSON, Parquet ou TXT."
+        )
+    tamanho = caminho.stat().st_size
+    if tamanho > LIMITE_ARQUIVO_LOCAL_BYTES:
+        raise ValueError(
+            f"O arquivo local possui {tamanho / (1024*1024):.1f} MB e excede o limite de 100 MB. "
+            "Divida a base ou use uma fonte administrada/importação em partes."
+        )
 
     return caminho
 
@@ -55,10 +65,23 @@ def carregar_planilha(caminho: str | Path) -> pd.DataFrame:
     caminho = validar_arquivo(caminho)
     extensao = caminho.suffix.lower()
 
-    if extensao == ".csv":
+    if extensao in {".csv", ".txt"}:
         return _carregar_csv(caminho)
     if extensao in {".xlsx", ".xls"}:
         return pd.read_excel(caminho)
+    if extensao == ".json":
+        try:
+            return pd.read_json(caminho)
+        except ValueError:
+            return pd.read_json(caminho, lines=True)
+    if extensao == ".parquet":
+        try:
+            return pd.read_parquet(caminho)
+        except ImportError as erro:
+            raise RuntimeError(
+                "A leitura de Parquet requer a dependência pyarrow. "
+                "Execute: pip install -r requirements.txt"
+            ) from erro
 
     raise ValueError(f"Extensão não suportada: {extensao}")
 
@@ -92,23 +115,55 @@ def verificar_compatibilidade(resultados: list[dict]) -> dict:
     conjunto_referencia = set(colunas_referencia)
     incompatibilidades = []
 
+    def familia(serie):
+        if serie.dropna().empty:
+            return "vazio"
+        if tipos_pd.is_bool_dtype(serie.dtype):
+            return "booleano"
+        if tipos_pd.is_numeric_dtype(serie.dtype):
+            return "numerico"
+        if tipos_pd.is_datetime64_any_dtype(serie.dtype):
+            return "data"
+        return "texto"
+
+    tipos_referencia = {
+        coluna: familia(resultados[0]["dataframe"][coluna])
+        for coluna in colunas_referencia
+    }
+
     for item in resultados[1:]:
         colunas_atual = list(item["dataframe"].columns)
         conjunto_atual = set(colunas_atual)
 
-        if conjunto_atual != conjunto_referencia:
+        conflitos_tipos = {}
+        if conjunto_atual == conjunto_referencia:
+            for coluna in colunas_referencia:
+                tipo_atual = familia(item["dataframe"][coluna])
+                tipo_referencia = tipos_referencia[coluna]
+                if (
+                    tipo_atual != tipo_referencia
+                    and "vazio" not in {tipo_atual, tipo_referencia}
+                ):
+                    conflitos_tipos[coluna] = {
+                        "esperado": tipo_referencia,
+                        "encontrado": tipo_atual,
+                    }
+
+        if conjunto_atual != conjunto_referencia or conflitos_tipos:
             incompatibilidades.append(
                 {
                     "arquivo": item["nome_arquivo"],
                     "colunas": colunas_atual,
                     "faltando": sorted(conjunto_referencia - conjunto_atual),
                     "extras": sorted(conjunto_atual - conjunto_referencia),
+                    "tipos": conflitos_tipos,
                 }
             )
 
     return {
         "compativel": not incompatibilidades,
         "colunas_referencia": colunas_referencia,
+        "tipos_referencia": tipos_referencia,
         "incompatibilidades": incompatibilidades,
     }
 

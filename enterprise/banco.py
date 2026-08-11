@@ -80,6 +80,7 @@ def inicializar_enterprise() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 usuario_id INTEGER,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 modulo TEXT NOT NULL,
                 titulo TEXT NOT NULL,
                 mensagem TEXT NOT NULL,
@@ -90,13 +91,15 @@ def inicializar_enterprise() -> None:
                 recurso_id INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-                FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+                FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id)
             );
 
             CREATE TABLE IF NOT EXISTS atividades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 usuario_id INTEGER,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 modulo TEXT NOT NULL,
                 acao TEXT NOT NULL,
                 descricao TEXT NOT NULL,
@@ -104,12 +107,14 @@ def inicializar_enterprise() -> None:
                 recurso_id INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-                FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+                FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id)
             );
 
             CREATE TABLE IF NOT EXISTS aprovacoes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 solicitante_id INTEGER NOT NULL,
                 responsavel_id INTEGER,
                 modulo TEXT NOT NULL,
@@ -123,6 +128,7 @@ def inicializar_enterprise() -> None:
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 decidido_em TEXT,
                 FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id),
                 FOREIGN KEY (solicitante_id) REFERENCES usuarios(id),
                 FOREIGN KEY (responsavel_id) REFERENCES usuarios(id)
             );
@@ -130,6 +136,7 @@ def inicializar_enterprise() -> None:
             CREATE TABLE IF NOT EXISTS tarefas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 modulo TEXT NOT NULL,
                 titulo TEXT NOT NULL,
                 descricao TEXT,
@@ -141,12 +148,14 @@ def inicializar_enterprise() -> None:
                 recurso_id INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id),
                 FOREIGN KEY (responsavel_id) REFERENCES usuarios(id)
             );
 
             CREATE TABLE IF NOT EXISTS documentos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 modulo TEXT NOT NULL,
                 titulo TEXT NOT NULL,
                 tipo TEXT,
@@ -157,12 +166,14 @@ def inicializar_enterprise() -> None:
                 criado_por INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id),
                 FOREIGN KEY (criado_por) REFERENCES usuarios(id)
             );
 
             CREATE TABLE IF NOT EXISTS integracoes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 provedor TEXT NOT NULL,
                 nome TEXT NOT NULL,
                 referencia_credencial TEXT,
@@ -171,12 +182,14 @@ def inicializar_enterprise() -> None:
                 ultima_sincronizacao TEXT,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (empresa_id, provedor, nome),
-                FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+                FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id)
             );
 
             CREATE TABLE IF NOT EXISTS workflows (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 nome TEXT NOT NULL,
                 evento_modulo TEXT NOT NULL,
                 evento_tipo TEXT NOT NULL,
@@ -186,6 +199,7 @@ def inicializar_enterprise() -> None:
                 criado_por INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id),
                 FOREIGN KEY (criado_por) REFERENCES usuarios(id)
             );
 
@@ -231,6 +245,7 @@ def inicializar_enterprise() -> None:
             CREATE TABLE IF NOT EXISTS itens_estoque (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 codigo TEXT NOT NULL,
                 descricao TEXT NOT NULL,
                 categoria TEXT,
@@ -241,14 +256,16 @@ def inicializar_enterprise() -> None:
                 status TEXT NOT NULL DEFAULT 'Ativo',
                 criado_por INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (empresa_id, codigo),
+                UNIQUE (empresa_id, filial_id, codigo),
                 FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id),
                 FOREIGN KEY (criado_por) REFERENCES usuarios(id)
             );
 
             CREATE TABLE IF NOT EXISTS movimentos_estoque (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 empresa_id INTEGER NOT NULL,
+                filial_id INTEGER,
                 item_id INTEGER NOT NULL,
                 tipo TEXT NOT NULL CHECK (tipo IN ('Entrada', 'Saída', 'Ajuste')),
                 quantidade REAL NOT NULL CHECK (quantidade > 0),
@@ -256,6 +273,7 @@ def inicializar_enterprise() -> None:
                 criado_por INTEGER,
                 criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (empresa_id) REFERENCES empresas(id),
+                FOREIGN KEY (filial_id) REFERENCES filiais(id),
                 FOREIGN KEY (item_id) REFERENCES itens_estoque(id),
                 FOREIGN KEY (criado_por) REFERENCES usuarios(id)
             );

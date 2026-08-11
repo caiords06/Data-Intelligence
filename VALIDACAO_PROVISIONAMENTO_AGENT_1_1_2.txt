@@ -1,0 +1,18 @@
+HOTFIX TI REMOTE 1.1.2 — PROVISIONAMENTO DO AGENTE
+
+Problema reproduzido:
+- GERAR / ROTACIONAR AGENTE criava um Toplevel branco/vazio.
+- A causa era chamada incompatível de preparar_janela_secundaria em interface/tecnologia.py.
+
+Correção:
+- janela.title("Provisionamento do agente TI")
+- self.root passado como parent real
+- assinatura atual de preparar_janela_secundaria utilizada
+- modal=True e tamanho mínimo configurados
+
+Validações executadas:
+- python -m compileall: OK
+- teste gráfico específico do provisionamento: 1 passed
+- tecnologia + servidor TI + agente: 22 passed
+- smoke gráfico das telas de Tecnologia: 3 passed, 6 subtests passed
+- análise AST de chamadas inválidas de preparar_janela_secundaria: 0 ocorrências

@@ -1,0 +1,46 @@
+VALIDAÇÃO DA ENTREGA · ESTOQUE 2.0
+=====================================
+
+Data da validação: 11/08/2026
+
+Comandos executados:
+
+1. python -m unittest discover -s tests
+   Resultado: 109 testes aprovados; 7 smoke tests gráficos
+   ignorados por exigirem display Tkinter e opt-in RUN_TK_SMOKE=1.
+
+2. python -m compileall -q .
+   Resultado: aprovado.
+
+3. python -m tabnanny .
+   Resultado: aprovado, sem inconsistências de indentação.
+
+4. Parse AST de todos os arquivos Python
+   Resultado: aprovado.
+
+5. Inicialização do banco empresarial
+   Resultado: aprovado.
+   - PRAGMA foreign_keys = 1;
+   - PRAGMA integrity_check = ok;
+   - 23 tabelas est_* disponíveis;
+   - enterprise_008_estoque_departamental aplicada;
+   - 2 triggers de imutabilidade do razão ativos.
+
+Cobertura funcional dedicada:
+- migração e cadastro mestre;
+- entrada, saldo, custo médio e razão imutável;
+- bloqueio de estoque negativo;
+- transferência com saldo em trânsito;
+- reservas e disponibilidade;
+- lotes, validade, séries e patrimônio;
+- inventário cego, aprovação e ajuste;
+- reposição integrada a Compras;
+- alertas idempotentes e análise inteligente;
+- relatórios, auditoria, Analytics e permissões granulares;
+- regressão do Financeiro 2.0, RH 2.0 e demais módulos.
+
+Limites mantidos de forma explícita:
+- não realiza compra ou pagamento automaticamente;
+- não executa integração fiscal/contábil homologada;
+- scanner físico precisa operar como teclado ou receber adaptador específico;
+- não substitui WMS/logística regulada sem integração especializada.

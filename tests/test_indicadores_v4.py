@@ -94,7 +94,22 @@ class IndicadoresV4Tests(unittest.TestCase):
         self.assertEqual(resultado["total_setores"], 2)
         self.assertEqual(resultado["folha_total"], 8000.0)
         self.assertEqual(resultado["salario_medio"], 4000.0)
-        self.assertEqual(resultado["turnover_percentual"], 50.0)
+        self.assertEqual(
+            resultado["taxa_desligamentos_sobre_base_percentual"],
+            50.0,
+        )
+        self.assertNotIn("turnover_percentual", resultado)
+
+    def test_motor_estoque_respeita_minimo_empresarial(self):
+        df = pd.DataFrame(
+            {
+                "Produto": ["A", "B"],
+                "Estoque": [8, 8],
+                "Estoque mínimo": [10, 5],
+            }
+        )
+        resultado = calcular_indicadores_estoque(df, campos(df))
+        self.assertEqual(resultado["produtos_baixo_estoque"], 1)
 
     def test_despachante_inclui_motor_e_indicadores_universais(self):
         df = pd.DataFrame({"Produto": ["A"], "Estoque": [3]})

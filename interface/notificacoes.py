@@ -6,7 +6,10 @@ from tkinter import messagebox, ttk
 from auth.sessao import SESSAO
 from enterprise.catalogo import MODULOS
 from enterprise.central import listar_notificacoes, marcar_notificacao_lida
-from interface.componentes import criar_botao, criar_card, criar_sidebar
+from interface.componentes import (
+    AreaRolavel, criar_botao, criar_cabecalho, criar_card,
+    criar_estado_vazio, criar_sidebar,
+)
 from interface.tema import (
     CORES,
     LAYOUT,
@@ -30,38 +33,34 @@ class TelaNotificacoes:
         criar_sidebar(
             self.container,
             self.navegacao,
-            ativo="inicio",
+            ativo="notificacoes",
             rodape_texto="←   Voltar ao cockpit",
             rodape_comando=self.navegacao.get("inicio"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
             side="left",
             fill="both",
             expand=True,
             padx=LAYOUT["conteudo_padx"],
             pady=(28, 24),
         )
-        tk.Label(
+        conteudo = viewport.conteudo
+        criar_cabecalho(
             conteudo,
-            text="Central de notificações",
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            conteudo,
-            text="Alertas dos módulos que seu perfil está autorizado a consultar.",
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(5, 20))
+            "Central de notificações",
+            "Alertas globais dos módulos que seu perfil está autorizado a consultar.",
+            breadcrumb="CENTRAL DA APLICAÇÃO  /  NOTIFICAÇÕES GLOBAIS",
+            etiqueta="CENTRAL GLOBAL",
+        )
 
         painel = criar_card(conteudo)
         painel.pack(fill="both", expand=True)
+        area_tabela = tk.Frame(painel, bg=CORES["card"])
+        area_tabela.pack(fill="both", expand=True, padx=16, pady=16)
         colunas = ("nivel", "modulo", "titulo", "mensagem", "data", "estado")
         self.tabela = ttk.Treeview(
-            painel,
+            area_tabela,
             columns=colunas,
             show="headings",
             style="Dark.Treeview",
@@ -77,15 +76,32 @@ class TelaNotificacoes:
             self.tabela.heading(coluna, text=titulo)
             self.tabela.column(coluna, width=largura, anchor="w")
         barra = ttk.Scrollbar(
-            painel,
+            area_tabela,
             orient="vertical",
             command=self.tabela.yview,
             style="Dark.Vertical.TScrollbar",
         )
-        self.tabela.configure(yscrollcommand=barra.set)
-        self.tabela.pack(side="left", fill="both", expand=True, padx=(16, 0), pady=16)
-        barra.pack(side="right", fill="y", padx=(0, 16), pady=16)
-        adicionar_divisorias_treeview(self.tabela)
+        barra_horizontal = ttk.Scrollbar(
+            area_tabela, orient="horizontal", command=self.tabela.xview,
+            style="Dark.Horizontal.TScrollbar",
+        )
+        self.tabela.configure(
+            yscrollcommand=barra.set, xscrollcommand=barra_horizontal.set
+        )
+        self.tabela.grid(row=0, column=0, sticky="nsew")
+        barra.grid(row=0, column=1, sticky="ns")
+        barra_horizontal.grid(row=1, column=0, sticky="ew")
+        area_tabela.grid_rowconfigure(0, weight=1, minsize=310)
+        area_tabela.grid_columnconfigure(0, weight=1)
+        self.estado_vazio = criar_estado_vazio(
+            area_tabela,
+            "◌",
+            "Nenhuma notificação disponível",
+            "Novos alertas autorizados aparecerão aqui.",
+        )
+        adicionar_divisorias_treeview(
+            self.tabela, sobreposicao=self.estado_vazio
+        )
 
         rodape = tk.Frame(conteudo, bg=CORES["bg"])
         rodape.pack(fill="x", pady=(14, 0))
@@ -118,6 +134,11 @@ class TelaNotificacoes:
                     "Lida" if registro["lida"] else "Nova",
                 ),
             )
+        if self.registros:
+            self.estado_vazio.place_forget()
+        else:
+            self.estado_vazio.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.estado_vazio.lift()
         self.status.configure(text=f"{len(self.registros)} notificação(ões)")
 
     def marcar_lida(self):

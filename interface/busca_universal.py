@@ -4,6 +4,7 @@ import tkinter as tk
 
 from auth.sessao import SESSAO
 from enterprise.central import busca_universal
+from interface.componentes import preparar_janela_secundaria
 from interface.tema import CORES
 
 
@@ -15,10 +16,9 @@ class JanelaBuscaUniversal:
         self.after_id = None
         self.janela = tk.Toplevel(root)
         self.janela.title("Busca universal")
-        self.janela.geometry("720x520")
-        self.janela.minsize(620, 420)
-        self.janela.transient(root)
-        self.janela.grab_set()
+        preparar_janela_secundaria(
+            self.janela, root, 720, 520, minimo=(620, 420)
+        )
         self.janela.configure(bg=CORES["bg"])
         self.criar_interface()
 

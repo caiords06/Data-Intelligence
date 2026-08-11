@@ -14,8 +14,16 @@ from enterprise.organizacao import (
     listar_departamentos,
     listar_empresas,
     listar_filiais,
+    remover_empresa_criada_sessao,
 )
-from interface.componentes import criar_botao, criar_card, criar_sidebar
+from interface.componentes import (
+    AreaRolavel,
+    GradeResponsiva,
+    criar_botao,
+    criar_cabecalho,
+    criar_card,
+    criar_sidebar,
+)
 from interface.tema import CORES, LAYOUT, configurar_estilos_ttk
 
 
@@ -35,34 +43,29 @@ class TelaOrganizacao:
         criar_sidebar(
             self.container,
             self.navegacao,
-            ativo="configuracoes",
+            ativo="organizacao",
             rodape_texto="←   Voltar às configurações",
             rodape_comando=self.navegacao.get("configuracoes"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
             side="left",
             fill="both",
             expand=True,
             padx=LAYOUT["conteudo_padx"],
             pady=(28, 24),
         )
-        tk.Label(
+        conteudo = viewport.conteudo
+        criar_cabecalho(
             conteudo,
-            text="Estrutura organizacional",
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            conteudo,
-            text=(
-                "Empresas, filiais, departamentos e centros de custo compartilhados por todos os módulos."
+            "Estrutura organizacional",
+            (
+                "Empresas, filiais, departamentos e centros de custo "
+                "compartilhados por todos os módulos."
             ),
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(5, 18))
+            breadcrumb="GESTÃO  /  ORGANIZAÇÃO",
+            etiqueta="MULTIEMPRESA V9.0",
+        )
 
         seletor = criar_card(conteudo)
         seletor.pack(fill="x", pady=(0, 14))
@@ -82,6 +85,11 @@ class TelaOrganizacao:
             width=34,
         )
         self.combo_empresa.pack(side="left", pady=10)
+        self.combo_empresa.bind(
+            "<<ComboboxSelected>>",
+            self._atualizar_estado_remocao,
+            add="+",
+        )
         criar_botao(
             seletor,
             "USAR EMPRESA",
@@ -91,8 +99,21 @@ class TelaOrganizacao:
         criar_botao(seletor, "+ EMPRESA", self.nova_empresa).pack(
             side="right", padx=14, pady=8
         )
+        self.botao_remover_empresa = criar_botao(
+            seletor,
+            "REMOVER EMPRESA",
+            self.remover_empresa,
+            tipo="perigo",
+            compacto=True,
+        )
+        self.botao_remover_empresa.pack(side="right", padx=(0, 2), pady=8)
 
-        grade = tk.Frame(conteudo, bg=CORES["bg"])
+        grade = GradeResponsiva(
+            conteudo,
+            max_colunas=3,
+            largura_minima=280,
+            gap=12,
+        )
         grade.pack(fill="both", expand=True)
         self.listas = {}
         for indice, (chave, titulo, comando) in enumerate(
@@ -103,12 +124,7 @@ class TelaOrganizacao:
             )
         ):
             card = criar_card(grade)
-            card.pack(
-                side="left",
-                fill="both",
-                expand=True,
-                padx=(0, 10) if indice < 2 else (0, 0),
-            )
+            grade.adicionar(card)
             tk.Label(
                 card,
                 text=titulo,
@@ -125,7 +141,7 @@ class TelaOrganizacao:
                 bd=0,
                 font=("Segoe UI", 9),
             )
-            lista.pack(fill="both", expand=True, padx=16)
+            lista.pack(fill="both", expand=True, padx=16, ipady=90)
             self.listas[chave] = lista
             criar_botao(card, "+ ADICIONAR", comando, tipo="secundario").pack(
                 anchor="w", padx=16, pady=14
@@ -150,6 +166,27 @@ class TelaOrganizacao:
             self.listas["departamentos"].insert(tk.END, f'{item["codigo"]} · {item["nome"]}')
         for item in listar_centros_custo():
             self.listas["centros"].insert(tk.END, f'{item["codigo"]} · {item["nome"]}')
+        self._atualizar_estado_remocao()
+
+    def _empresa_selecionada(self):
+        return self.mapa_empresas.get(self.empresa_var.get())
+
+    def _atualizar_estado_remocao(self, _evento=None):
+        empresa_id = self._empresa_selecionada()
+        permitida = bool(
+            empresa_id is not None
+            and SESSAO.empresa_criada_na_sessao(empresa_id)
+            and (
+                SESSAO.empresa_id is None
+                or int(SESSAO.empresa_id) != int(empresa_id)
+            )
+        )
+        self.botao_remover_empresa.configure(
+            state="normal" if permitida else "disabled",
+            bg=CORES["danger"] if permitida else CORES["input"],
+            fg=CORES["text"] if permitida else CORES["text_disabled"],
+            cursor="hand2" if permitida else "arrow",
+        )
 
     def alterar_contexto(self):
         empresa_id = self.mapa_empresas.get(self.empresa_var.get())
@@ -171,6 +208,49 @@ class TelaOrganizacao:
             criar_empresa(nome, cnpj, SESSAO.usuario)
         except (PermissionError, ValueError) as erro:
             messagebox.showerror("Nova empresa", str(erro), parent=self.root)
+            return
+        self.carregar()
+
+    def remover_empresa(self):
+        empresa_id = self._empresa_selecionada()
+        if empresa_id is None:
+            return
+        if not SESSAO.empresa_criada_na_sessao(empresa_id):
+            messagebox.showwarning(
+                "Remover empresa",
+                "Somente empresas criadas durante a sessão atual podem ser removidas.",
+                parent=self.root,
+            )
+            return
+        if SESSAO.empresa_id is not None and int(SESSAO.empresa_id) == int(empresa_id):
+            messagebox.showwarning(
+                "Remover empresa",
+                "Selecione outra empresa como ativa antes de remover esta.",
+                parent=self.root,
+            )
+            return
+        nome = next(
+            (
+                item["nome"]
+                for item in self.empresas
+                if int(item["id"]) == int(empresa_id)
+            ),
+            f"#{empresa_id}",
+        )
+        if not messagebox.askyesno(
+            "Remover empresa",
+            (
+                f"Remover '{nome}' da operação atual?\n\n"
+                "A empresa será desativada com segurança e continuará registrada "
+                "na auditoria."
+            ),
+            parent=self.root,
+        ):
+            return
+        try:
+            remover_empresa_criada_sessao(empresa_id, SESSAO.usuario)
+        except (PermissionError, ValueError) as erro:
+            messagebox.showerror("Remover empresa", str(erro), parent=self.root)
             return
         self.carregar()
 

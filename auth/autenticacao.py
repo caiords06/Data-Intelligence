@@ -22,6 +22,7 @@ from auth.banco import (
     tem_usuarios,
 )
 from auth.seguranca import gerar_hash_senha, verificar_senha
+from auth.sessao import SESSAO
 from enterprise.perfis_acesso import validar_perfil_acesso
 
 PERFIS_VALIDOS = {"admin", "usuario"}
@@ -46,14 +47,31 @@ def _usuario_publico(registro) -> dict:
         "usuario": registro["usuario"],
         "perfil": registro["perfil"],
         "perfil_acesso": perfil_acesso,
+        "email_corporativo": (registro["email_corporativo"] if "email_corporativo" in registro.keys() else None),
+        "sessao_epoch": int((registro["sessao_epoch"] if "sessao_epoch" in registro.keys() else 0) or 0),
         "ativo": bool(registro["ativo"]),
     }
 
 
-def _criar_usuario(nome, usuario, senha, perfil, perfil_acesso=None) -> dict:
+def _criar_usuario(
+    nome,
+    usuario,
+    senha,
+    perfil,
+    perfil_acesso=None,
+    *,
+    empresa_id=None,
+    filial_id=None,
+    email_corporativo=None,
+) -> dict:
     nome = str(nome).strip()
     usuario = str(usuario).strip().lower()
     perfil = str(perfil).strip().lower()
+    email_corporativo = str(email_corporativo or f"{usuario}@dataintelligence.local").strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email_corporativo):
+        raise ValueError("Informe um e-mail corporativo válido.")
+    if len(email_corporativo) > 180:
+        raise ValueError("O e-mail corporativo deve possuir no máximo 180 caracteres.")
     if len(nome) < 2 or len(nome) > 100:
         raise ValueError("O nome deve possuir entre 2 e 100 caracteres.")
     if not _LOGIN_VALIDO.fullmatch(usuario):
@@ -77,8 +95,14 @@ def _criar_usuario(nome, usuario, senha, perfil, perfil_acesso=None) -> dict:
             salt,
             perfil,
             perfil_acesso,
+            empresa_id,
+            filial_id,
+            email_corporativo,
         )
     except sqlite3.IntegrityError as erro:
+        mensagem = str(erro).lower()
+        if "email_corporativo" in mensagem or "ux_usuarios_email_corporativo" in mensagem:
+            raise ValueError("Este e-mail corporativo já está cadastrado.") from erro
         raise ValueError("Este nome de usuário já está cadastrado.") from erro
     return {
         "id": usuario_id,
@@ -86,6 +110,8 @@ def _criar_usuario(nome, usuario, senha, perfil, perfil_acesso=None) -> dict:
         "usuario": usuario,
         "perfil": perfil,
         "perfil_acesso": perfil_acesso,
+        "email_corporativo": email_corporativo,
+        "sessao_epoch": 0,
         "ativo": True,
     }
 
@@ -97,10 +123,30 @@ def criar_usuario(
     perfil="usuario",
     ator=None,
     perfil_acesso=None,
+    email_corporativo=None,
 ) -> dict:
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        _exigir_admin(ator)
+        from enterprise.servidor_cliente import criar_usuario_remoto
+        return criar_usuario_remoto({
+            "nome": nome, "usuario": usuario, "senha": senha, "perfil": perfil,
+            "perfil_acesso": perfil_acesso or "analista",
+            "email_corporativo": email_corporativo,
+            "filial_id": SESSAO.filial_id,
+        })
     if tem_usuarios():
         _exigir_admin(ator)
-    criado = _criar_usuario(nome, usuario, senha, perfil, perfil_acesso)
+    criado = _criar_usuario(
+        nome,
+        usuario,
+        senha,
+        perfil,
+        perfil_acesso,
+        empresa_id=SESSAO.empresa_id,
+        filial_id=SESSAO.filial_id,
+        email_corporativo=email_corporativo,
+    )
     registrar_auditoria(
         "usuario_criado",
         usuario_id=(ator or {}).get("id"),
@@ -113,7 +159,7 @@ def criar_usuario(
     return criado
 
 
-def criar_admin_inicial(nome, usuario, senha) -> dict:
+def criar_admin_inicial(nome, usuario, senha, email_corporativo=None) -> dict:
     if tem_usuarios():
         raise ValueError("O administrador inicial já foi configurado.")
     criado = _criar_usuario(
@@ -122,6 +168,7 @@ def criar_admin_inicial(nome, usuario, senha) -> dict:
         senha,
         perfil="admin",
         perfil_acesso="administrador",
+        email_corporativo=email_corporativo,
     )
     registrar_auditoria(
         "admin_inicial_criado",
@@ -144,6 +191,10 @@ def _bloqueio_ativo(valor: str | None) -> bool:
 
 
 def autenticar_usuario(usuario, senha) -> dict:
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        from enterprise.servidor_cliente import login_remoto
+        return login_remoto(str(usuario), str(senha))
     login = str(usuario).strip().lower()
     registro = buscar_usuario(login)
     if registro is None:
@@ -181,11 +232,20 @@ def autenticar_usuario(usuario, senha) -> dict:
 
 def obter_usuarios(ator=None) -> list[dict]:
     _exigir_admin(ator)
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        from enterprise.servidor_cliente import listar_usuarios_remoto
+        return listar_usuarios_remoto()
     return listar_usuarios()
 
 
 def definir_status_usuario(usuario_id, ativo, ator=None) -> None:
     _exigir_admin(ator)
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        from enterprise.servidor_cliente import atualizar_usuario_remoto
+        atualizar_usuario_remoto(int(usuario_id), {"ativo": bool(ativo)})
+        return
     alvo = buscar_usuario_por_id(int(usuario_id))
     if alvo is None:
         raise ValueError("Usuário não encontrado.")
@@ -208,6 +268,11 @@ def definir_status_usuario(usuario_id, ativo, ator=None) -> None:
 
 def redefinir_senha(usuario_id, nova_senha, ator=None) -> None:
     _exigir_admin(ator)
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        from enterprise.servidor_cliente import atualizar_usuario_remoto
+        atualizar_usuario_remoto(int(usuario_id), {"nova_senha": nova_senha})
+        return
     if buscar_usuario_por_id(int(usuario_id)) is None:
         raise ValueError("Usuário não encontrado.")
     senha_hash, salt = gerar_hash_senha(nova_senha)
@@ -225,6 +290,11 @@ def definir_perfil_acesso_usuario(
     ator=None,
 ) -> None:
     _exigir_admin(ator)
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        from enterprise.servidor_cliente import atualizar_usuario_remoto
+        atualizar_usuario_remoto(int(usuario_id), {"perfil_acesso": perfil_acesso})
+        return
     alvo = buscar_usuario_por_id(int(usuario_id))
     if alvo is None:
         raise ValueError("Usuário não encontrado.")
@@ -243,6 +313,11 @@ def definir_perfil_acesso_usuario(
 
 
 def alterar_propria_senha(ator: dict, senha_atual: str, nova_senha: str) -> None:
+    from core.nodo import usa_servidor_remoto
+    if usa_servidor_remoto():
+        from enterprise.servidor_cliente import alterar_propria_senha_remota
+        alterar_propria_senha_remota(senha_atual, nova_senha)
+        return
     if not ator or not ator.get("id"):
         raise PermissionError("Usuário não autenticado.")
     registro = buscar_usuario_por_id(int(ator["id"]))

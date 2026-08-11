@@ -76,6 +76,17 @@ adaptativa em `interface/painel_modulo.py`.
 
 Todo comando de prévia informa ao usuário que a integração está pendente.
 
+## Representações visuais — etapa 1
+
+A tela de login recebeu duas camadas visuais independentes. O background
+tecnológico cobre a janela completa, enquanto o ecossistema transparente
+posiciona o motor analítico no centro de nove módulos sem criar um retângulo
+visível. Os ativos ficam em `assets/backgrounds/` e `assets/illustrations/` e
+são carregados por `interface/imagens.py`, sem caminhos absolutos do Windows.
+
+Se o arquivo ou o Pillow não estiver disponível, a tela usa automaticamente
+uma representação vetorial simplificada em `Canvas`, sem interromper o login.
+
 ## Validação
 
 - compilação Python concluída;

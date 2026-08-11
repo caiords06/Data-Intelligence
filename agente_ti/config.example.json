@@ -1,0 +1,12 @@
+{
+  "servidor_url": "http://127.0.0.1:8000",
+  "patrimonio": "TI-LAB-001",
+  "agent_id": "substitua-por-um-uuid-unico",
+  "intervalo_segundos": 60,
+  "timeout_segundos": 15,
+  "verificar_tls": true,
+  "ca_bundle": null,
+  "provedor_remoto": "AnyDesk",
+  "executavel_remoto": null,
+  "permitir_http_privado": false
+}

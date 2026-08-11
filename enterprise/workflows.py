@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 
 from auth.banco import conectar
 from enterprise.catalogo import MODULOS
-from enterprise.contexto import exigir_permissao, garantir_contexto_sessao
+from enterprise.contexto import obter_escopo_ator
 
 ACOES_PERMITIDAS = {"notificar", "criar_tarefa", "solicitar_aprovacao"}
 OPERADORES = {
@@ -40,17 +41,18 @@ def criar_workflow(
         raise ValueError("Tipo de evento obrigatório.")
     _validar_condicoes(condicoes)
     _validar_acoes(acoes)
-    empresa_id, _ = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     with conectar() as conexao:
         cursor = conexao.execute(
             """
             INSERT INTO workflows (
-                empresa_id, nome, evento_modulo, evento_tipo,
+                empresa_id, filial_id, nome, evento_modulo, evento_tipo,
                 condicoes_json, acoes_json, criado_por
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 empresa_id,
+                filial_id,
                 nome,
                 evento_modulo,
                 evento_tipo,
@@ -65,11 +67,12 @@ def criar_workflow(
 def listar_workflows(ator: dict) -> list[dict]:
     if not ator or ator.get("perfil") != "admin":
         raise PermissionError("Somente administradores podem consultar workflows.")
-    empresa_id, _ = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     with conectar() as conexao:
         registros = conexao.execute(
-            "SELECT * FROM workflows WHERE empresa_id = ? ORDER BY id DESC",
-            (empresa_id,),
+            "SELECT * FROM workflows WHERE empresa_id = ? AND (filial_id = ? OR ? IS NULL) "
+            "ORDER BY id DESC",
+            (empresa_id, filial_id, filial_id),
         ).fetchall()
     resultado = []
     for item in registros:
@@ -78,6 +81,23 @@ def listar_workflows(ator: dict) -> list[dict]:
         registro["acoes"] = json.loads(registro.pop("acoes_json"))
         resultado.append(registro)
     return resultado
+
+
+def definir_workflow_ativo(workflow_id: int, ativo: bool, ator: dict) -> None:
+    if not ator or ator.get("perfil") != "admin":
+        raise PermissionError("Somente administradores podem alterar workflows.")
+    empresa_id, filial_id = obter_escopo_ator(ator)
+    with conectar() as conexao:
+        cursor = conexao.execute(
+            """
+            UPDATE workflows
+            SET ativo = ?, atualizado_em = CURRENT_TIMESTAMP
+            WHERE id = ? AND empresa_id = ? AND (filial_id = ? OR ? IS NULL)
+            """,
+            (int(bool(ativo)), int(workflow_id), empresa_id, filial_id, filial_id),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Workflow não encontrado.")
 
 
 def executar_workflows(
@@ -89,16 +109,16 @@ def executar_workflows(
     recurso_tipo: str | None = None,
     recurso_id: int | None = None,
 ) -> list[int]:
-    empresa_id, _ = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     with conectar() as conexao:
         registros = conexao.execute(
             """
             SELECT * FROM workflows
-            WHERE empresa_id = ? AND evento_modulo = ?
+            WHERE empresa_id = ? AND (filial_id = ? OR ? IS NULL) AND evento_modulo = ?
               AND evento_tipo = ? AND ativo = 1
             ORDER BY id
             """,
-            (empresa_id, evento_modulo, evento_tipo),
+            (empresa_id, filial_id, filial_id, evento_modulo, evento_tipo),
         ).fetchall()
         executados = []
         for registro in registros:
@@ -109,6 +129,7 @@ def executar_workflows(
             _executar_acoes(
                 conexao,
                 empresa_id,
+                filial_id,
                 evento_modulo,
                 acoes,
                 payload,
@@ -119,13 +140,14 @@ def executar_workflows(
             conexao.execute(
                 """
                 INSERT INTO atividades (
-                    usuario_id, empresa_id, modulo, acao, descricao,
+                    usuario_id, empresa_id, filial_id, modulo, acao, descricao,
                     recurso_tipo, recurso_id
-                ) VALUES (?, ?, ?, 'workflow_executado', ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, 'workflow_executado', ?, ?, ?)
                 """,
                 (
                     ator.get("id"),
                     empresa_id,
+                    filial_id,
                     evento_modulo,
                     f'Workflow executado: {registro["nome"]}',
                     recurso_tipo,
@@ -155,6 +177,48 @@ def _validar_acoes(acoes):
     for acao in acoes:
         if not isinstance(acao, dict) or acao.get("tipo") not in ACOES_PERMITIDAS:
             raise ValueError("Ação de workflow não permitida.")
+        modulo = acao.get("modulo")
+        if modulo is not None and modulo not in MODULOS:
+            raise ValueError("Módulo de ação inválido.")
+        if acao.get("tipo") == "notificar":
+            nivel = acao.get("nivel", "info")
+            if nivel not in {"info", "sucesso", "aviso", "critico"}:
+                raise ValueError("Nível de notificação inválido.")
+            usuario_id = acao.get("usuario_id")
+            if usuario_id not in (None, ""):
+                try:
+                    int(usuario_id)
+                except (TypeError, ValueError) as erro:
+                    raise ValueError("Usuário de notificação inválido.") from erro
+        if acao.get("tipo") == "criar_tarefa":
+            if acao.get("prioridade", "Média") not in {"Baixa", "Média", "Alta", "Crítica"}:
+                raise ValueError("Prioridade de tarefa inválida.")
+
+
+def _usuario_no_escopo(conexao, usuario_id, empresa_id, filial_id):
+    if usuario_id in (None, ""):
+        return None
+    usuario_id = int(usuario_id)
+    registro = conexao.execute(
+        """
+        SELECT u.id, u.ativo, u.perfil, ue.filial_id
+        FROM usuarios u
+        JOIN usuarios_empresas ue ON ue.usuario_id=u.id
+        WHERE u.id=? AND u.ativo=1 AND ue.empresa_id=? AND ue.ativo=1
+        """,
+        (usuario_id, empresa_id),
+    ).fetchone()
+    if registro is None:
+        raise ValueError("Usuário da ação não pertence à empresa do workflow.")
+    filial_vinculada = registro["filial_id"]
+    if (
+        str(registro["perfil"]).lower() != "admin"
+        and filial_vinculada is not None
+        and filial_id is not None
+        and int(filial_vinculada) != int(filial_id)
+    ):
+        raise ValueError("Usuário da ação não pertence à filial do workflow.")
+    return usuario_id
 
 
 def _condicoes_atendidas(condicoes, payload):
@@ -171,7 +235,9 @@ def _condicoes_atendidas(condicoes, payload):
         if operador in {"maior", "maior_igual", "menor", "menor_igual"}:
             try:
                 esquerdo, direito = float(atual), float(esperado)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
+                return False
+            if not math.isfinite(esquerdo) or not math.isfinite(direito):
                 return False
             comparacoes = {
                 "maior": esquerdo > direito,
@@ -196,6 +262,7 @@ def _texto_template(texto, payload):
 def _executar_acoes(
     conexao,
     empresa_id,
+    filial_id,
     evento_modulo,
     acoes,
     payload,
@@ -206,19 +273,23 @@ def _executar_acoes(
     for acao in acoes:
         tipo = acao["tipo"]
         if tipo == "notificar":
+            usuario_destino = _usuario_no_escopo(
+                conexao, acao.get("usuario_id"), empresa_id, filial_id
+            )
             nivel = acao.get("nivel", "info")
             if nivel not in {"info", "sucesso", "aviso", "critico"}:
                 nivel = "info"
             conexao.execute(
                 """
                 INSERT INTO notificacoes (
-                    usuario_id, empresa_id, modulo, titulo, mensagem, nivel,
+                    usuario_id, empresa_id, filial_id, modulo, titulo, mensagem, nivel,
                     recurso_tipo, recurso_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    acao.get("usuario_id"),
+                    usuario_destino,
                     empresa_id,
+                    filial_id,
                     acao.get("modulo", evento_modulo),
                     _texto_template(acao.get("titulo", "Alerta automático"), payload),
                     _texto_template(acao.get("mensagem", ""), payload),
@@ -234,12 +305,13 @@ def _executar_acoes(
             conexao.execute(
                 """
                 INSERT INTO tarefas (
-                    empresa_id, modulo, titulo, descricao, prioridade,
+                    empresa_id, filial_id, modulo, titulo, descricao, prioridade,
                     recurso_tipo, recurso_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     empresa_id,
+                    filial_id,
                     modulo,
                     _texto_template(acao.get("titulo", "Tarefa automática"), payload),
                     _texto_template(acao.get("descricao", ""), payload),
@@ -251,23 +323,34 @@ def _executar_acoes(
         elif tipo == "solicitar_aprovacao":
             campo_valor = str(acao.get("campo_valor", "valor"))
             try:
-                valor = max(0.0, float(payload.get(campo_valor, 0) or 0))
-            except (TypeError, ValueError):
+                valor = float(payload.get(campo_valor, 0) or 0)
+            except (TypeError, ValueError, OverflowError):
                 valor = 0.0
+            if not math.isfinite(valor):
+                valor = 0.0
+            valor = max(0.0, valor)
             conexao.execute(
                 """
                 INSERT INTO aprovacoes (
-                    empresa_id, solicitante_id, modulo, recurso_tipo,
-                    recurso_id, titulo, valor
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    empresa_id, filial_id, solicitante_id, modulo, recurso_tipo,
+                    recurso_id, titulo, valor, valor_centavos
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     empresa_id,
+                    filial_id,
                     ator["id"],
                     evento_modulo,
                     recurso_tipo or "workflow",
                     recurso_id or 0,
                     _texto_template(acao.get("titulo", "Aprovação automática"), payload),
                     valor,
+                    int(round(valor * 100)),
                 ),
             )
+
+# V9.1: em estações Central/Cliente, as APIs transacionais permitidas acima
+# são executadas no Servidor Corporativo. No servidor/standalone permanecem locais.
+from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
+_instalar_proxy_modulo(globals(), __name__)
+del _instalar_proxy_modulo

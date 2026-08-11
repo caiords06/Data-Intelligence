@@ -1,0 +1,29 @@
+DATA INTELLIGENCE ENTERPRISE PLATFORM — TECNOLOGIA 3.0
+
+VALIDAÇÃO FINAL
+
+[OK] python -m compileall -q .
+[OK] python -m tabnanny <arquivos Python>
+[OK] 149 testes coletados e exercitados em lotes
+[OK] 9 smoke tests Tkinter
+[OK] 52 subtests no smoke Tkinter
+[OK] tests/test_tecnologia_2_0.py
+[OK] tests/test_tecnologia_3_0.py
+[OK] tests/test_agente_ti.py
+[OK] testes V8.1 / V8.2 / V8.2.1
+[OK] testes de autenticação, dados, enterprise, Financeiro, RH, Estoque, Compras e interface
+[OK] SQLite integrity_check = ok
+[OK] SQLite foreign_key_check = 0 violações
+[OK] enterprise_011_tecnologia_operacoes_rede aplicada
+
+ESCOPO DE SEGURANÇA DA DESCOBERTA
+- Somente CIDR privado explicitamente cadastrado/autorizado.
+- Máximo de 1024 hosts por descoberta interativa.
+- ICMP + hostname + cache ARP.
+- Sem port scan, exploração, captura de pacotes ou credenciais remotas.
+- Firewall do Windows nunca é desativado; regra opcional é ICMPv4/Private/CIDR específico.
+
+LIMITE CONHECIDO
+- O receptor HTTP/HTTPS central do agente ainda não existe. O domínio já recebe
+  snapshots através de registrar_snapshot_agente(), mas falta o serviço servidor
+  que valide o heartbeat HMAC enviado por agente_ti.transport.

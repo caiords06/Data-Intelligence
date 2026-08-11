@@ -1,0 +1,30 @@
+DATA INTELLIGENCE ENTERPRISE PLATFORM
+VALIDAÇÃO DA ENTREGA — AGENTE TI 1.0
+
+Data da validação: 11/08/2026
+
+RESULTADO AUTOMATIZADO
+- 140 testes aprovados na regressão completa.
+- 7 smoke tests gráficos ignorados por dependerem de display Tk.
+- 11 testes específicos do agente aprovados.
+- compileall: aprovado.
+- tabnanny: aprovado.
+
+CAPACIDADES
+- coleta minimizada da máquina local;
+- inventário de sistema, rede local e capacidade;
+- métricas de CPU, memória, disco e uptime;
+- identificação segura do AnyDesk quando configurado;
+- heartbeat JSON com HMAC-SHA256, timestamp e nonce;
+- HTTPS obrigatório fora do localhost;
+- token fora do JSON e proteção com DPAPI no Windows;
+- execução contínua com backoff, logs rotativos e status local;
+- bloqueio de segunda instância;
+- build em executável único e instalação no Agendador do Windows;
+- modo collect e dry-run sem comunicação externa.
+
+LIMITES DESTA ETAPA
+- A API central ainda não foi criada.
+- O agente não varre a rede.
+- O agente não captura tela, teclas, documentos ou navegação.
+- A instalação automática deve ser executada por administrador.

@@ -5,14 +5,20 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from auth.autenticacao import alterar_propria_senha
 from auth.sessao import SESSAO
+from core.nodo import usa_servidor_remoto
 from configuracoes.preferencias import (
     PREFERENCIAS_PADRAO,
     carregar_preferencias,
     salvar_preferencias,
 )
 from enterprise.backups import criar_backup
-from interface.componentes import criar_sidebar
-from interface.tema import CORES, configurar_estilos_ttk
+from interface.componentes import (
+    AreaRolavel,
+    GradeResponsiva,
+    criar_cabecalho,
+    criar_sidebar,
+)
+from interface.tema import CORES, LAYOUT, configurar_estilos_ttk
 
 CATEGORIAS_TELA = {
     "Detecção automática": "automatica",
@@ -55,32 +61,37 @@ class TelaConfiguracoesApp:
             rodape_texto="←   Voltar ao início",
             rodape_comando=self.navegacao.get("inicio"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(side="left", fill="both", expand=True, padx=40, pady=30)
-        tk.Label(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=LAYOUT["conteudo_padx"],
+            pady=(28, 24),
+        )
+        conteudo = viewport.conteudo
+        criar_cabecalho(
             conteudo,
-            text="Configurações da aplicação",
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            conteudo,
-            text=(
+            "Configurações da aplicação",
+            (
                 "Preferências globais, comportamento da interface e segurança da conta. "
                 "Estas opções não alteram o motor da análise atual."
             ),
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(5, 22))
+            breadcrumb="GESTÃO  /  CONFIGURAÇÕES",
+            etiqueta="PREFERÊNCIAS V9.0",
+        )
 
-        grade = tk.Frame(conteudo, bg=CORES["bg"])
+        grade = GradeResponsiva(
+            conteudo,
+            max_colunas=2,
+            largura_minima=390,
+            gap=18,
+        )
         grade.pack(fill="both", expand=True)
         esquerda = self._card(grade, "EXPERIÊNCIA E PADRÕES")
         direita = self._card(grade, "FONTES E SEGURANÇA")
-        esquerda.pack(side="left", fill="both", expand=True, padx=(0, 9))
-        direita.pack(side="right", fill="both", expand=True, padx=(9, 0))
+        grade.adicionar(esquerda)
+        grade.adicionar(direita)
 
         self.delay_var = tk.IntVar(value=self.preferencias["atraso_minimo_segundos"])
         self.timeout_var = tk.IntVar(value=self.preferencias["tempo_sessao_minutos"])
@@ -153,6 +164,18 @@ class TelaConfiguracoesApp:
                 bd=0,
                 cursor="hand2",
             ).pack(anchor="w", padx=22, pady=(10, 0), ipadx=10, ipady=7)
+            if usa_servidor_remoto():
+                tk.Button(
+                    direita,
+                    text="ARQUIVOS DO SERVIDOR CORPORATIVO",
+                    command=self.abrir_servidor_corporativo,
+                    font=("Segoe UI", 9, "bold"),
+                    bg=CORES["primary"],
+                    fg="#FFFFFF",
+                    activebackground=CORES["primary_hover"],
+                    activeforeground="#FFFFFF",
+                    relief="flat", bd=0, cursor="hand2",
+                ).pack(anchor="w", padx=22, pady=(10, 0), ipadx=10, ipady=7)
 
         rodape = tk.Frame(conteudo, bg=CORES["bg"])
         rodape.pack(fill="x", pady=(16, 0))
@@ -314,6 +337,13 @@ class TelaConfiguracoesApp:
             ),
             parent=self.root,
         )
+
+    def abrir_servidor_corporativo(self):
+        try:
+            from interface.servidor_corporativo import JanelaServidorCorporativo
+            JanelaServidorCorporativo(self.root)
+        except (PermissionError, ValueError, ConnectionError) as erro:
+            messagebox.showerror("Servidor corporativo", str(erro), parent=self.root)
 
     def salvar(self):
         try:

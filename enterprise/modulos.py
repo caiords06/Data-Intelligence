@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -12,7 +13,7 @@ import pandas as pd
 
 from auth.banco import conectar
 from enterprise.catalogo import MODULOS, obter_modulo
-from enterprise.contexto import exigir_permissao, garantir_contexto_sessao
+from enterprise.contexto import exigir_permissao, obter_escopo_ator
 from enterprise.workflows import executar_workflows
 
 
@@ -44,11 +45,17 @@ def _numero(valor, inteiro=False):
         texto = texto.replace(".", "").replace(",", ".")
     try:
         numero = float(texto)
-    except ValueError as erro:
+    except (TypeError, ValueError) as erro:
         raise ValueError(f"Valor numérico inválido: {valor}") from erro
+    if not math.isfinite(numero):
+        raise ValueError("O valor numérico precisa ser finito.")
     if numero < 0:
         raise ValueError("Valores negativos não são permitidos neste campo.")
-    return int(numero) if inteiro else numero
+    if inteiro:
+        if not numero.is_integer():
+            raise ValueError("Este campo aceita somente números inteiros.")
+        return int(numero)
+    return numero
 
 
 def _centavos(valor) -> int:
@@ -62,6 +69,8 @@ def _centavos(valor) -> int:
         decimal = Decimal(texto).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except (InvalidOperation, ValueError) as erro:
         raise ValueError(f"Valor monetário inválido: {valor}") from erro
+    if not decimal.is_finite():
+        raise ValueError("O valor monetário precisa ser finito.")
     if decimal < 0:
         raise ValueError("Valores negativos não são permitidos neste campo.")
     return int(decimal * 100)
@@ -108,14 +117,77 @@ def _normalizar_dados(modulo: str, dados: dict) -> dict:
     return resultado
 
 
+def _validar_regras_negocio(modulo: str, valores: dict) -> None:
+    """Valida relações entre campos que o schema isolado não consegue garantir."""
+    if modulo == "rh":
+        email = str(valores.get("email") or "").strip()
+        if email and ("@" not in email or email.startswith("@") or email.endswith("@")):
+            raise ValueError("Informe um e-mail corporativo válido.")
+        admissao = valores.get("admissao")
+        desligamento = valores.get("desligamento")
+        if admissao and desligamento and desligamento < admissao:
+            raise ValueError("A data de desligamento não pode ser anterior à admissão.")
+    elif modulo == "financeiro":
+        tipo = valores.get("tipo")
+        status = valores.get("status")
+        if tipo == "Receita" and status == "Pago":
+            raise ValueError("Receitas devem usar status Recebido, Pendente ou Cancelado.")
+        if tipo == "Despesa" and status == "Recebido":
+            raise ValueError("Despesas devem usar status Pago, Pendente ou Cancelado.")
+    elif modulo == "compras":
+        if float(valores.get("quantidade") or 0) <= 0:
+            raise ValueError("A quantidade solicitada deve ser maior que zero.")
+    elif modulo == "marketing":
+        leads = int(valores.get("leads") or 0)
+        conversoes = int(valores.get("conversoes") or 0)
+        if conversoes > leads:
+            raise ValueError("Conversões não podem ser maiores que o número de leads.")
+    elif modulo == "comercial":
+        etapa = valores.get("etapa")
+        status = valores.get("status")
+        if etapa == "Ganho" and status != "Ganho":
+            raise ValueError("Uma oportunidade na etapa Ganho deve possuir status Ganho.")
+        if etapa == "Perdido" and status != "Perdido":
+            raise ValueError("Uma oportunidade na etapa Perdido deve possuir status Perdido.")
+        if status == "Ganho" and etapa != "Ganho":
+            raise ValueError("Status Ganho exige a etapa Ganho.")
+        if status == "Perdido" and etapa != "Perdido":
+            raise ValueError("Status Perdido exige a etapa Perdido.")
+
+
+def _validar_referencias_organizacionais(conexao, empresa_id: int, valores: dict) -> None:
+    departamento_id = valores.get("departamento_id")
+    centro_custo_id = valores.get("centro_custo_id")
+    departamento = None
+    if departamento_id is not None:
+        departamento = conexao.execute(
+            "SELECT id FROM departamentos WHERE id=? AND empresa_id=? AND ativo=1",
+            (int(departamento_id), int(empresa_id)),
+        ).fetchone()
+        if departamento is None:
+            raise ValueError("Departamento não pertence à empresa atual ou está inativo.")
+    if centro_custo_id is not None:
+        centro = conexao.execute(
+            "SELECT id, departamento_id FROM centros_custo "
+            "WHERE id=? AND empresa_id=? AND ativo=1",
+            (int(centro_custo_id), int(empresa_id)),
+        ).fetchone()
+        if centro is None:
+            raise ValueError("Centro de custo não pertence à empresa atual ou está inativo.")
+        if departamento_id is not None and centro["departamento_id"] is not None:
+            if int(centro["departamento_id"]) != int(departamento_id):
+                raise ValueError("O centro de custo não pertence ao departamento selecionado.")
+
+
 def criar_registro(modulo: str, dados: dict, ator: dict) -> int:
     exigir_permissao(ator, modulo, "escrever")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     configuracao = obter_modulo(modulo)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         raise ValueError("Este módulo não utiliza registros operacionais.")
     valores = _normalizar_dados(modulo, dados)
+    _validar_regras_negocio(modulo, valores)
     _incluir_centavos(modulo, valores)
     valores["empresa_id"] = empresa_id
     valores["filial_id"] = filial_id
@@ -125,6 +197,7 @@ def criar_registro(modulo: str, dados: dict, ator: dict) -> int:
     marcadores = ", ".join("?" for _ in colunas)
     try:
         with conectar() as conexao:
+            _validar_referencias_organizacionais(conexao, empresa_id, valores)
             cursor = conexao.execute(
                 f"INSERT INTO {tabela} ({', '.join(colunas)}) VALUES ({marcadores})",
                 tuple(valores[coluna] for coluna in colunas),
@@ -133,6 +206,7 @@ def criar_registro(modulo: str, dados: dict, ator: dict) -> int:
             _registrar_atividade(
                 conexao,
                 empresa_id,
+                filial_id,
                 ator["id"],
                 modulo,
                 "registro_criado",
@@ -192,7 +266,7 @@ def descricao_registro(modulo: str, dados: dict) -> str:
 def listar_registros(modulo: str, ator: dict, limite: int = 200) -> list[dict]:
     """Compatibilidade: devolve os registros ativos da filial atual."""
     exigir_permissao(ator, modulo, "ler")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         return []
@@ -232,7 +306,7 @@ def listar_registros_paginados(
 ) -> dict:
     """Consulta uma página filtrada sem carregar o módulo inteiro na UI."""
     exigir_permissao(ator, modulo, "ler")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         return {"registros": [], "total": 0, "pagina": 1, "paginas": 1, "tamanho": 50}
@@ -316,7 +390,80 @@ def consultar_dados_para_analytics(
 ) -> pd.DataFrame:
     """Consulta o universo autorizado; qualquer amostra deve ser explícita."""
     exigir_permissao(ator, modulo, "ler")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    if modulo == "financeiro":
+        from enterprise.financeiro import exportar_dataframe_financeiro
+
+        dataframe = exportar_dataframe_financeiro(ator)
+        if dataframe.empty:
+            raise ValueError("O módulo ainda não possui registros para análise.")
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        if "tipo" in dataframe.columns:
+            dataframe = dataframe.rename(columns={"tipo": "tipo_movimento"})
+        return dataframe
+    if modulo == "ti":
+        from enterprise.tecnologia import exportar_dataframe_tecnologia
+
+        dataframe = exportar_dataframe_tecnologia(ator)
+        if dataframe.empty:
+            raise ValueError("Tecnologia ainda não possui chamados para análise.")
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        return dataframe
+    if modulo == "estoque":
+        from enterprise.estoque import exportar_dataframe_estoque
+
+        dataframe = exportar_dataframe_estoque(ator)
+        if dataframe.empty:
+            raise ValueError("O Estoque ainda não possui itens para análise.")
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        for coluna in ("custo_medio_centavos", "ultimo_custo_centavos"):
+            if coluna in dataframe.columns:
+                dataframe[coluna.removesuffix("_centavos")] = pd.to_numeric(
+                    dataframe[coluna], errors="coerce"
+                ).fillna(0) / 100
+                dataframe = dataframe.drop(columns=[coluna])
+        return dataframe
+    if modulo == "compras":
+        from enterprise.compras import exportar_dataframe_compras
+
+        dataframe = exportar_dataframe_compras(ator)
+        if dataframe.empty:
+            raise ValueError("Compras ainda não possui solicitações para análise.")
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        return dataframe
+    if modulo == "rh":
+        from enterprise.rh import exportar_dataframe_rh
+
+        dataframe = exportar_dataframe_rh(ator)
+        if dataframe.empty:
+            raise ValueError("O RH ainda não possui colaboradores para análise.")
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        if "salario_centavos" in dataframe.columns:
+            dataframe["salario"] = pd.to_numeric(
+                dataframe["salario_centavos"], errors="coerce"
+            ).fillna(0) / 100
+            dataframe = dataframe.drop(columns=["salario_centavos"])
+        return dataframe
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         raise ValueError("Este módulo não possui fonte analítica operacional.")
@@ -371,7 +518,7 @@ def exportar_dataframe_modulo(modulo: str, ator: dict) -> pd.DataFrame:
 
 def obter_registro(modulo: str, registro_id: int, ator: dict) -> dict:
     exigir_permissao(ator, modulo, "ler")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         raise ValueError("Módulo sem registros operacionais.")
@@ -387,13 +534,15 @@ def obter_registro(modulo: str, registro_id: int, ator: dict) -> dict:
 
 def atualizar_registro(modulo: str, registro_id: int, dados: dict, ator: dict) -> None:
     exigir_permissao(ator, modulo, "escrever")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         raise ValueError("Módulo sem registros operacionais.")
     valores = _normalizar_dados(modulo, dados)
+    _validar_regras_negocio(modulo, valores)
     _incluir_centavos(modulo, valores)
     with conectar() as conexao:
+        _validar_referencias_organizacionais(conexao, empresa_id, valores)
         anterior = conexao.execute(
             f"SELECT * FROM {tabela} WHERE id = ? AND empresa_id = ? AND filial_id = ?",
             (int(registro_id), empresa_id, filial_id),
@@ -423,6 +572,7 @@ def atualizar_registro(modulo: str, registro_id: int, dados: dict, ator: dict) -
         _registrar_atividade(
             conexao,
             empresa_id,
+            filial_id,
             ator["id"],
             modulo,
             "registro_atualizado",
@@ -443,7 +593,7 @@ def alterar_estado_registro(
     estado = str(estado).title()
     if estado not in ESTADOS_REGISTRO:
         raise ValueError("Estado de registro inválido.")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     if not tabela:
         raise ValueError("Módulo sem registros operacionais.")
@@ -484,7 +634,7 @@ def alterar_estado_registro(
 
 def listar_historico_registro(modulo: str, registro_id: int, ator: dict) -> list[dict]:
     exigir_permissao(ator, modulo, "ler")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     tabela = TABELAS_MODULOS.get(modulo)
     with conectar() as conexao:
         registros = conexao.execute(
@@ -509,7 +659,7 @@ def movimentar_estoque(
     observacao: str = "",
 ) -> None:
     exigir_permissao(ator, "estoque", "escrever")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     if tipo not in {"Entrada", "Saída", "Ajuste"}:
         raise ValueError("Tipo de movimentação inválido.")
     quantidade = _numero(quantidade)
@@ -538,14 +688,18 @@ def movimentar_estoque(
         conexao.execute(
             """
             INSERT INTO movimentos_estoque (
-                empresa_id, item_id, tipo, quantidade, observacao, criado_por
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                empresa_id, filial_id, item_id, tipo, quantidade, observacao, criado_por
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (empresa_id, int(item_id), tipo, quantidade, observacao, ator["id"]),
+            (
+                empresa_id, filial_id, int(item_id), tipo, quantidade,
+                str(observacao or "").strip()[:1000], ator["id"],
+            ),
         )
         _registrar_atividade(
             conexao,
             empresa_id,
+            filial_id,
             ator["id"],
             "estoque",
             "movimentacao",
@@ -557,6 +711,7 @@ def movimentar_estoque(
             _notificar(
                 conexao,
                 empresa_id,
+                filial_id,
                 "estoque",
                 "Estoque crítico",
                 f"{item['descricao']} possui {novo:g}; mínimo {item['estoque_minimo']:g}.",
@@ -568,60 +723,48 @@ def movimentar_estoque(
 
 def calcular_resumo_modulo(modulo: str, ator: dict) -> dict:
     exigir_permissao(ator, modulo, "ler")
-    empresa_id, filial_id = garantir_contexto_sessao()
+    empresa_id, filial_id = obter_escopo_ator(ator)
     with conectar() as conexao:
         if modulo == "rh":
-            linha = conexao.execute(
-                """
-                SELECT COUNT(*) total,
-                       SUM(CASE WHEN status = 'Ativo' THEN 1 ELSE 0 END) ativos,
-                       COUNT(DISTINCT departamento_id) departamentos,
-                       COALESCE(SUM(CASE WHEN status = 'Ativo' THEN salario_centavos ELSE 0 END), 0) / 100.0 folha
-                FROM colaboradores WHERE empresa_id = ? AND filial_id = ?
-                  AND estado_registro = 'Ativo'
-                """,
-                (empresa_id, filial_id),
-            ).fetchone()
-            cards = (("COLABORADORES", linha["total"], "inteiro"), ("ATIVOS", linha["ativos"], "inteiro"), ("DEPARTAMENTOS", linha["departamentos"], "inteiro"), ("FOLHA BASE", linha["folha"], "moeda"))
+            from enterprise.rh import resumo_rh
+
+            resumo = resumo_rh(ator)
+            cards = (
+                ("COLABORADORES", resumo["total"], "inteiro"),
+                ("ATIVOS", resumo["ativos"], "inteiro"),
+                ("DEPARTAMENTOS", resumo["departamentos"], "inteiro"),
+                ("FOLHA BASE", (resumo["folha_base"] or 0) / 100, "moeda"),
+            )
         elif modulo == "financeiro":
-            linha = conexao.execute(
-                """
-                SELECT COALESCE(SUM(CASE WHEN tipo='Receita' AND status!='Cancelado' THEN valor_centavos ELSE 0 END),0) / 100.0 receitas,
-                       COALESCE(SUM(CASE WHEN tipo='Despesa' AND status!='Cancelado' THEN valor_centavos ELSE 0 END),0) / 100.0 despesas,
-                       SUM(CASE WHEN status='Pendente' THEN 1 ELSE 0 END) pendentes
-                FROM lancamentos_financeiros
-                WHERE empresa_id = ? AND filial_id = ?
-                  AND estado_registro = 'Ativo'
-                """,
-                (empresa_id, filial_id),
-            ).fetchone()
-            saldo = float(linha["receitas"]) - float(linha["despesas"])
-            cards = (("RECEITAS", linha["receitas"], "moeda"), ("DESPESAS", linha["despesas"], "moeda"), ("SALDO", saldo, "moeda"), ("PENDENTES", linha["pendentes"], "inteiro"))
+            from enterprise.financeiro import resumo_financeiro
+
+            resumo = resumo_financeiro(ator)
+            cards = (
+                ("RECEITAS", resumo["receitas_centavos"] / 100, "moeda"),
+                ("DESPESAS", resumo["despesas_centavos"] / 100, "moeda"),
+                ("SALDO", resumo["saldo_centavos"] / 100, "moeda"),
+                ("PENDENTES", resumo["pendentes"], "inteiro"),
+            )
         elif modulo == "estoque":
-            linha = conexao.execute(
-                """
-                SELECT COUNT(*) itens, COALESCE(SUM(quantidade),0) unidades,
-                       SUM(CASE WHEN quantidade <= estoque_minimo THEN 1 ELSE 0 END) criticos,
-                       COALESCE(SUM(quantidade * custo_centavos),0) / 100.0 valor
-                FROM itens_estoque WHERE empresa_id = ? AND filial_id = ?
-                  AND estado_registro = 'Ativo' AND status='Ativo'
-                """,
-                (empresa_id, filial_id),
-            ).fetchone()
-            cards = (("ITENS", linha["itens"], "inteiro"), ("UNIDADES", linha["unidades"], "decimal"), ("CRÍTICOS", linha["criticos"], "inteiro"), ("VALOR", linha["valor"], "moeda"))
+            from enterprise.estoque import resumo_estoque
+
+            resumo = resumo_estoque(ator)
+            cards = (
+                ("ITENS", resumo["itens"], "inteiro"),
+                ("UNIDADES", resumo["unidades"], "decimal"),
+                ("CRÍTICOS", resumo["criticos"], "inteiro"),
+                ("VALOR", (resumo["valor_centavos"] or 0) / 100, "moeda"),
+            )
         elif modulo == "compras":
-            linha = conexao.execute(
-                """
-                SELECT COUNT(*) total,
-                       SUM(CASE WHEN status='Pendente' THEN 1 ELSE 0 END) pendentes,
-                       SUM(CASE WHEN status='Aprovado' THEN 1 ELSE 0 END) aprovadas,
-                       COALESCE(SUM(valor_estimado_centavos),0) / 100.0 valor
-                FROM solicitacoes_compra WHERE empresa_id = ? AND filial_id = ?
-                  AND estado_registro = 'Ativo'
-                """,
-                (empresa_id, filial_id),
-            ).fetchone()
-            cards = (("SOLICITAÇÕES", linha["total"], "inteiro"), ("PENDENTES", linha["pendentes"], "inteiro"), ("APROVADAS", linha["aprovadas"], "inteiro"), ("VALOR ESTIMADO", linha["valor"], "moeda"))
+            from enterprise.compras import resumo_compras
+
+            resumo = resumo_compras(ator)
+            cards = (
+                ("SOLICITAÇÕES", resumo["solicitacoes_abertas"], "inteiro"),
+                ("COTAÇÕES", resumo["cotacoes_abertas"], "inteiro"),
+                ("PEDIDOS ABERTOS", resumo["pedidos_abertos"], "inteiro"),
+                ("VALOR EM PEDIDOS", (resumo["valor_pedidos_centavos"] or 0) / 100, "moeda"),
+            )
         elif modulo == "ti":
             linha = conexao.execute(
                 """
@@ -674,12 +817,12 @@ def calcular_resumo_modulo(modulo: str, ator: dict) -> dict:
                 """
                 SELECT COUNT(*) total,
                        SUM(CASE WHEN status='Ativo' THEN 1 ELSE 0 END) ativos,
-                       SUM(CASE WHEN vencimento IS NOT NULL AND vencimento <= ? AND status='Ativo' THEN 1 ELSE 0 END) vencendo,
+                       SUM(CASE WHEN vencimento IS NOT NULL AND vencimento >= ? AND vencimento <= ? AND status='Ativo' THEN 1 ELSE 0 END) vencendo,
                        COALESCE(SUM(CASE WHEN risco IN ('Alto','Crítico') THEN valor_centavos ELSE 0 END),0) / 100.0 risco_valor
                 FROM contratos_juridicos WHERE empresa_id = ? AND filial_id = ?
                   AND estado_registro = 'Ativo'
                 """,
-                (limite, empresa_id, filial_id),
+                (date.today().isoformat(), limite, empresa_id, filial_id),
             ).fetchone()
             cards = (("CONTRATOS", linha["total"], "inteiro"), ("ATIVOS", linha["ativos"], "inteiro"), ("VENCEM EM 30 DIAS", linha["vencendo"], "inteiro"), ("RISCO ALTO", linha["risco_valor"], "moeda"))
         elif modulo == "comercial":
@@ -704,6 +847,7 @@ def calcular_resumo_modulo(modulo: str, ator: dict) -> dict:
 def _registrar_atividade(
     conexao,
     empresa_id,
+    filial_id,
     usuario_id,
     modulo,
     acao,
@@ -714,11 +858,14 @@ def _registrar_atividade(
     conexao.execute(
         """
         INSERT INTO atividades (
-            usuario_id, empresa_id, modulo, acao, descricao,
+            usuario_id, empresa_id, filial_id, modulo, acao, descricao,
             recurso_tipo, recurso_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (usuario_id, empresa_id, modulo, acao, descricao, recurso_tipo, recurso_id),
+        (
+            usuario_id, empresa_id, filial_id, modulo, acao, descricao,
+            recurso_tipo, recurso_id,
+        ),
     )
 
 
@@ -762,6 +909,7 @@ def _registrar_historico_alteracao(
 def _notificar(
     conexao,
     empresa_id,
+    filial_id,
     modulo,
     titulo,
     mensagem,
@@ -773,11 +921,14 @@ def _notificar(
     conexao.execute(
         """
         INSERT INTO notificacoes (
-            usuario_id, empresa_id, modulo, titulo, mensagem, nivel,
+            usuario_id, empresa_id, filial_id, modulo, titulo, mensagem, nivel,
             recurso_tipo, recurso_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (usuario_id, empresa_id, modulo, titulo, mensagem, nivel, recurso_tipo, recurso_id),
+        (
+            usuario_id, empresa_id, filial_id, modulo, titulo, mensagem, nivel,
+            recurso_tipo, recurso_id,
+        ),
     )
 
 
@@ -790,22 +941,23 @@ def _aplicar_regras_iniciais(
     ator,
 ):
     tabela = TABELAS_MODULOS[modulo]
+    filial_id = dados.get("filial_id")
     if modulo == "estoque" and dados["quantidade"] <= dados["estoque_minimo"]:
         _notificar(
-            conexao, empresa_id, modulo, "Estoque abaixo do mínimo",
+            conexao, empresa_id, filial_id, modulo, "Estoque abaixo do mínimo",
             f"{dados['descricao']} iniciou com {dados['quantidade']:g} unidades.",
             "aviso", tabela, registro_id,
         )
     elif modulo == "ti" and dados["prioridade"] == "Crítica":
         _notificar(
-            conexao, empresa_id, modulo, "Chamado crítico aberto",
+            conexao, empresa_id, filial_id, modulo, "Chamado crítico aberto",
             dados["titulo"], "critico", tabela, registro_id,
         )
     elif modulo == "juridico" and dados.get("vencimento"):
         vencimento = date.fromisoformat(dados["vencimento"])
-        if vencimento <= date.today() + timedelta(days=30):
+        if date.today() <= vencimento <= date.today() + timedelta(days=30):
             _notificar(
-                conexao, empresa_id, modulo, "Contrato próximo do vencimento",
+                conexao, empresa_id, filial_id, modulo, "Contrato próximo do vencimento",
                 f"{dados['titulo']} vence em {vencimento.strftime('%d/%m/%Y')}.",
                 "aviso", tabela, registro_id,
             )
@@ -818,11 +970,18 @@ def _aplicar_regras_iniciais(
             conexao.execute(
                 """
                 INSERT INTO tarefas (
-                    empresa_id, modulo, titulo, prioridade,
+                    empresa_id, filial_id, modulo, titulo, prioridade,
                     recurso_tipo, recurso_id
-                ) VALUES (?, ?, ?, 'Média', ?, ?)
+                ) VALUES (?, ?, ?, ?, 'Média', ?, ?)
                 """,
-                (empresa_id, destino, titulo, tabela, registro_id),
+                (
+                    empresa_id,
+                    dados.get("filial_id"),
+                    destino,
+                    titulo,
+                    tabela,
+                    registro_id,
+                ),
             )
 
     if modulo in {"compras", "administrativo"}:
@@ -848,3 +1007,9 @@ def _aplicar_regras_iniciais(
                 valor_centavos,
             ),
         )
+
+# V9.1: em estações Central/Cliente, as APIs transacionais permitidas acima
+# são executadas no Servidor Corporativo. No servidor/standalone permanecem locais.
+from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
+_instalar_proxy_modulo(globals(), __name__)
+del _instalar_proxy_modulo

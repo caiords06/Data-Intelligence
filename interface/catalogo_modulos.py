@@ -1,4 +1,4 @@
-"""Catálogo visual de módulos e permissões da V7."""
+"""Catálogo visual de módulos e permissões da V8."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from auth.sessao import SESSAO
 from enterprise.catalogo import MODULOS, ORDEM_MODULOS
 from enterprise.contexto import listar_modulos_permitidos
 from interface.componentes import (
+    AreaRolavel,
+    GradeResponsiva,
     criar_botao,
     criar_cabecalho,
     criar_card,
@@ -33,46 +35,47 @@ class TelaCatalogoModulos:
             rodape_texto="Sair com segurança",
             rodape_comando=self.navegacao.get("sair"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
             side="left",
             fill="both",
             expand=True,
             padx=LAYOUT["conteudo_padx"],
             pady=(24, 20),
         )
+        conteudo = viewport.conteudo
         permitidos = set(listar_modulos_permitidos(SESSAO.usuario))
-        cab_acoes = tk.Frame(conteudo, bg=CORES["bg"])
-        criar_chip(
-            cab_acoes,
-            f"{len(permitidos)} MÓDULO(S) AUTORIZADO(S)",
-            cor=CORES["success"],
-            fundo=CORES["success_soft"],
-        ).pack(side="right")
         criar_cabecalho(
             conteudo,
             "Módulos empresariais",
             "Escolha uma área para acessar seu painel especializado. Módulos sem permissão permanecem visíveis para contextualizar a plataforma.",
-            acao=cab_acoes,
+            acao=lambda area: criar_chip(
+                area,
+                f"{len(permitidos)} MÓDULO(S) AUTORIZADO(S)",
+                cor=CORES["success"],
+                fundo=CORES["success_soft"],
+            ),
             breadcrumb="CENTRAL DA APLICAÇÃO  /  MÓDULOS",
         )
 
-        grade = tk.Frame(conteudo, bg=CORES["bg"])
+        grade = GradeResponsiva(
+            conteudo,
+            max_colunas=4,
+            largura_minima=255,
+            gap=10,
+            bg=CORES["bg"],
+        )
         grade.pack(fill="both", expand=True)
-        colunas = 4
         for indice, chave in enumerate(ORDEM_MODULOS):
             modulo = MODULOS[chave]
             autorizado = chave in permitidos
+            suporte_ti = chave == "ti" and not autorizado
+            acessivel = autorizado or suporte_ti
             card = criar_card(grade, destaque=chave == "analytics" and autorizado)
-            card.grid(
-                row=indice // colunas,
-                column=indice % colunas,
-                sticky="nsew",
-                padx=(0, 10) if indice % colunas < colunas - 1 else 0,
-                pady=(0, 10),
-            )
+            grade.adicionar(card)
+            card.grid_columnconfigure(0, weight=1)
             topo = tk.Frame(card, bg=CORES["card"])
-            topo.pack(fill="x", padx=17, pady=(14, 8))
+            topo.grid(row=0, column=0, sticky="ew", padx=17, pady=(14, 8))
             tk.Label(
                 topo,
                 text=modulo["icone"],
@@ -82,11 +85,19 @@ class TelaCatalogoModulos:
                 width=3,
                 height=2,
             ).pack(side="left")
+            if suporte_ti:
+                chip_texto = "SUPORTE DISPONÍVEL"
+                chip_cor = CORES["primary"]
+                chip_fundo = CORES["primary_soft"]
+            else:
+                chip_texto = "AUTORIZADO" if autorizado else "RESTRITO"
+                chip_cor = CORES["success"] if autorizado else CORES["danger_muted"]
+                chip_fundo = CORES["success_soft"] if autorizado else CORES["danger_soft"]
             criar_chip(
                 topo,
-                "AUTORIZADO" if autorizado else "RESTRITO",
-                cor=CORES["success"] if autorizado else CORES["danger_muted"],
-                fundo=CORES["success_soft"] if autorizado else CORES["danger_soft"],
+                chip_texto,
+                cor=chip_cor,
+                fundo=chip_fundo,
             ).pack(side="right")
             tk.Label(
                 card,
@@ -94,7 +105,7 @@ class TelaCatalogoModulos:
                 font=("Segoe UI", 10, "bold"),
                 fg=CORES["text"],
                 bg=CORES["card"],
-            ).pack(anchor="w", padx=17)
+            ).grid(row=1, column=0, sticky="w", padx=17)
             descricao = tk.Label(
                 card,
                 text=modulo["descricao"],
@@ -104,14 +115,15 @@ class TelaCatalogoModulos:
                 justify="left",
                 anchor="nw",
             )
-            descricao.pack(fill="x", padx=17, pady=(4, 8))
+            descricao.grid(row=2, column=0, sticky="nsew", padx=17, pady=(4, 10))
+            card.grid_rowconfigure(2, weight=1, minsize=52)
             descricao.bind(
                 "<Configure>",
                 lambda evento, label=descricao: label.configure(
                     wraplength=max(120, evento.width - 4)
                 ),
             )
-            if autorizado:
+            if acessivel:
                 destino = (
                     self.navegacao.get("analytics")
                     if chave == "analytics"
@@ -119,11 +131,11 @@ class TelaCatalogoModulos:
                 )
                 criar_botao(
                     card,
-                    "ABRIR PAINEL  →",
+                    "ABRIR SUPORTE  →" if suporte_ti else "ABRIR PAINEL  →",
                     destino,
                     tipo="secundario",
                     compacto=True,
-                ).pack(side="bottom", fill="x", padx=17, pady=(0, 14))
+                ).grid(row=3, column=0, sticky="ew", padx=17, pady=(0, 14))
             else:
                 tk.Label(
                     card,
@@ -134,10 +146,4 @@ class TelaCatalogoModulos:
                     justify="left",
                     anchor="w",
                     wraplength=215,
-                ).pack(side="bottom", fill="x", padx=17, pady=(0, 14))
-
-        total_linhas = (len(ORDEM_MODULOS) + colunas - 1) // colunas
-        for coluna in range(colunas):
-            grade.grid_columnconfigure(coluna, weight=1, uniform="modulos")
-        for linha in range(total_linhas):
-            grade.grid_rowconfigure(linha, weight=1, uniform="linhas")
+                ).grid(row=3, column=0, sticky="ew", padx=17, pady=(0, 14))

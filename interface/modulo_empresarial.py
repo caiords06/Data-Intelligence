@@ -16,7 +16,15 @@ from enterprise.modulos import (
     obter_registro,
 )
 from enterprise.organizacao import listar_centros_custo, listar_departamentos
-from interface.componentes import criar_botao, criar_card, criar_sidebar
+from interface.componentes import (
+    AreaRolavel,
+    criar_botao,
+    criar_cabecalho,
+    criar_card,
+    criar_estado_vazio,
+    preparar_janela_secundaria,
+    criar_sidebar,
+)
 from interface.configuracao_modulos_ui import PAINEIS_MODULOS
 from interface.tema import (
     CORES,
@@ -71,60 +79,60 @@ class TelaModuloEmpresarial:
             rodape_texto="Voltar ao painel do módulo",
             rodape_comando=lambda: self.navegacao["modulo"](self.modulo),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
             side="left",
             fill="both",
             expand=True,
             padx=LAYOUT["conteudo_padx"],
             pady=(26, 22),
         )
+        conteudo = viewport.conteudo
         self._cabecalho(conteudo)
         self.area_cards = tk.Frame(conteudo, bg=CORES["bg"])
         self.area_cards.pack(fill="x", pady=(0, 16))
         self._tabela(conteudo)
 
     def _cabecalho(self, parent):
-        cabecalho = tk.Frame(parent, bg=CORES["bg"])
-        cabecalho.pack(fill="x", pady=(0, 18))
-        tk.Label(
-            cabecalho,
-            text=f'{self.configuracao["icone"]}  {self.configuracao["nome"]}',
-            font=("Segoe UI", 24, "bold"),
-            fg=CORES["text"],
-            bg=CORES["bg"],
-        ).pack(anchor="w")
-        tk.Label(
-            cabecalho,
-            text=self.configuracao["descricao"],
-            font=("Segoe UI", 10),
-            fg=CORES["text_sec"],
-            bg=CORES["bg"],
-        ).pack(anchor="w", pady=(4, 0))
-        acoes = tk.Frame(cabecalho, bg=CORES["bg"])
-        acoes.place(relx=1.0, rely=0.0, anchor="ne")
-        if tem_permissao(SESSAO.usuario, "analytics", "escrever"):
-            criar_botao(
-                acoes,
-                "◈  ANALISAR MÓDULO",
-                lambda: self.navegacao["analisar_modulo"](self.modulo),
-                tipo="secundario",
-            ).pack(side="right", padx=(8, 0))
-        if tem_permissao(SESSAO.usuario, self.modulo, "escrever"):
-            criar_botao(
-                acoes,
-                "+  NOVO REGISTRO",
-                self.abrir_formulario,
-            ).pack(side="right")
-        if self.modulo == "estoque" and tem_permissao(
-            SESSAO.usuario, "estoque", "escrever"
-        ):
-            criar_botao(
-                acoes,
-                "MOVIMENTAR",
-                self.abrir_movimentacao,
-                tipo="secundario",
-            ).pack(side="right", padx=(0, 8))
+        def acoes(area):
+            bloco = tk.Frame(area, bg=CORES["bg"])
+            if tem_permissao(SESSAO.usuario, "analytics", "escrever"):
+                criar_botao(
+                    bloco,
+                    "◈  ANALISAR MÓDULO",
+                    lambda: self.navegacao["analisar_modulo"](self.modulo),
+                    tipo="secundario",
+                    compacto=True,
+                ).pack(side="right", padx=(8, 0))
+            if tem_permissao(SESSAO.usuario, self.modulo, "escrever"):
+                criar_botao(
+                    bloco,
+                    "+  NOVO REGISTRO",
+                    self.abrir_formulario,
+                    compacto=True,
+                ).pack(side="right")
+            if self.modulo == "estoque" and tem_permissao(
+                SESSAO.usuario, "estoque", "escrever"
+            ):
+                criar_botao(
+                    bloco,
+                    "MOVIMENTAR",
+                    self.abrir_movimentacao,
+                    tipo="secundario",
+                    compacto=True,
+                ).pack(side="right", padx=(0, 8))
+            return bloco
+        criar_cabecalho(
+            parent,
+            f'{self.configuracao["icone"]}  {self.configuracao["nome"]}',
+            self.configuracao["descricao"],
+            acao=acoes,
+            breadcrumb=(
+                f"MÓDULOS  /  {self.configuracao['nome'].upper()}  /  "
+                "REGISTROS OPERACIONAIS"
+            ),
+            etiqueta="CADASTRO V9.0",
+        )
 
     def _tabela(self, parent):
         painel = criar_card(parent)
@@ -216,44 +224,30 @@ class TelaModuloEmpresarial:
             command=self.tabela.yview,
             style="Dark.Vertical.TScrollbar",
         )
-        self.tabela.configure(yscrollcommand=barra.set)
-        self.tabela.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(18, 0),
-            pady=(0, 18),
+        barra_horizontal = ttk.Scrollbar(
+            area_tabela,
+            orient="horizontal",
+            command=self.tabela.xview,
+            style="Dark.Horizontal.TScrollbar",
         )
-        barra.pack(side="right", fill="y", padx=(0, 18), pady=(0, 18))
+        self.tabela.configure(
+            yscrollcommand=barra.set,
+            xscrollcommand=barra_horizontal.set,
+        )
+        self.tabela.grid(row=0, column=0, sticky="nsew", padx=(18, 0))
+        barra.grid(row=0, column=1, sticky="ns", padx=(0, 18))
+        barra_horizontal.grid(row=1, column=0, sticky="ew", padx=(18, 0))
+        area_tabela.grid_rowconfigure(0, weight=1, minsize=280)
+        area_tabela.grid_columnconfigure(0, weight=1)
         self.tabela.bind("<<TreeviewSelect>>", self._atualizar_acoes)
 
-        self.estado_vazio = tk.Frame(
+        self.estado_vazio = criar_estado_vazio(
             area_tabela,
-            bg=CORES["input"],
-            padx=28,
-            pady=18,
+            self.configuracao["icone"],
+            "Nenhum registro neste módulo",
+            "Utilize Novo registro para iniciar a operação.",
+            cor=self.configuracao["cor"],
         )
-        tk.Label(
-            self.estado_vazio,
-            text=self.configuracao["icone"],
-            font=("Segoe UI Symbol", 28),
-            fg=self.configuracao["cor"],
-            bg=CORES["input"],
-        ).pack()
-        tk.Label(
-            self.estado_vazio,
-            text="Nenhum registro neste módulo",
-            font=("Segoe UI", 12, "bold"),
-            fg=CORES["text"],
-            bg=CORES["input"],
-        ).pack(pady=(7, 3))
-        tk.Label(
-            self.estado_vazio,
-            text="Utilize Novo registro para iniciar a operação.",
-            font=("Segoe UI", 8),
-            fg=CORES["text_sec"],
-            bg=CORES["input"],
-        ).pack()
 
         adicionar_divisorias_treeview(
             self.tabela,
@@ -345,11 +339,8 @@ class TelaModuloEmpresarial:
         if self.registros:
             self.estado_vazio.place_forget()
         else:
-            self.estado_vazio.place(
-                relx=0.5,
-                rely=0.64,
-                anchor="center"
-            )
+            self.estado_vazio.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.estado_vazio.lift()
 
             # Garante que a mensagem fique acima das divisórias
             self.estado_vazio.lift()
@@ -461,10 +452,9 @@ class TelaModuloEmpresarial:
         )
         janela = tk.Toplevel(self.root)
         janela.title(titulo_formulario)
-        janela.geometry("700x520")
-        janela.minsize(620, 480)
-        janela.transient(self.root)
-        janela.grab_set()
+        preparar_janela_secundaria(
+            janela, self.root, 700, 520, minimo=(620, 480)
+        )
         janela.configure(bg=CORES["bg"])
         tk.Label(
             janela,

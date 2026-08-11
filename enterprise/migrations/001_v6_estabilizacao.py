@@ -57,11 +57,6 @@ def _migrar_centavos(conexao, tabela: str, pares: tuple[str, ...]) -> None:
 
 
 def upgrade(conexao) -> None:
-    filial_padrao = conexao.execute(
-        "SELECT id FROM filiais WHERE ativo = 1 ORDER BY id LIMIT 1"
-    ).fetchone()
-    filial_id = int(filial_padrao["id"]) if filial_padrao else None
-
     for tabela in TABELAS_OPERACIONAIS:
         _adicionar_coluna(conexao, tabela, "filial_id", "INTEGER")
         _adicionar_coluna(
@@ -73,11 +68,17 @@ def upgrade(conexao) -> None:
         _adicionar_coluna(conexao, tabela, "arquivado_em", "TEXT")
         _adicionar_coluna(conexao, tabela, "arquivado_por", "INTEGER")
         _adicionar_coluna(conexao, tabela, "atualizado_em", "TEXT")
-        if filial_id is not None:
-            conexao.execute(
-                f"UPDATE {tabela} SET filial_id = ? WHERE filial_id IS NULL",
-                (filial_id,),
+        conexao.execute(
+            f"""
+            UPDATE {tabela}
+            SET filial_id = (
+                SELECT f.id FROM filiais f
+                WHERE f.empresa_id = {tabela}.empresa_id AND f.ativo = 1
+                ORDER BY f.id LIMIT 1
             )
+            WHERE filial_id IS NULL
+            """
+        )
         conexao.execute(
             f"UPDATE {tabela} SET atualizado_em = COALESCE(atualizado_em, criado_em)"
         )
@@ -92,11 +93,17 @@ def upgrade(conexao) -> None:
     _adicionar_coluna(conexao, "aprovacoes", "filial_id", "INTEGER")
     _adicionar_coluna(conexao, "aprovacoes", "excluido_em", "TEXT")
     _adicionar_coluna(conexao, "aprovacoes", "excluido_por", "INTEGER")
-    if filial_id is not None:
-        conexao.execute(
-            "UPDATE aprovacoes SET filial_id = ? WHERE filial_id IS NULL",
-            (filial_id,),
+    conexao.execute(
+        """
+        UPDATE aprovacoes
+        SET filial_id = (
+            SELECT f.id FROM filiais f
+            WHERE f.empresa_id = aprovacoes.empresa_id AND f.ativo = 1
+            ORDER BY f.id LIMIT 1
         )
+        WHERE filial_id IS NULL
+        """
+    )
 
     for coluna, definicao in (
         ("empresa_id", "INTEGER"),

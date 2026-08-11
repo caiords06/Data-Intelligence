@@ -1,4 +1,4 @@
-"""Central da aplicação e cockpit executivo da V7."""
+"""Central da aplicação e cockpit executivo da V8."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from enterprise.central import resumo_cockpit
 from enterprise.contexto import obter_contexto
 from enterprise.perfis_acesso import nome_perfil_acesso
 from interface.componentes import (
-    acao_em_preparacao,
+    AreaRolavel,
+    GradeResponsiva,
     criar_botao,
     criar_cabecalho,
     criar_card,
@@ -42,28 +43,20 @@ class TelaPrincipal:
             rodape_texto="Sair com segurança",
             rodape_comando=self.navegacao.get("sair"),
         )
-        conteudo = tk.Frame(self.container, bg=CORES["bg"])
-        conteudo.pack(
+        viewport = AreaRolavel(self.container)
+        viewport.pack(
             side="left",
             fill="both",
             expand=True,
             padx=LAYOUT["conteudo_padx"],
             pady=(24, 22),
         )
+        conteudo = viewport.conteudo
 
-        acoes_cabecalho = tk.Frame(conteudo, bg=CORES["bg"])
-        criar_botao(
-            acoes_cabecalho,
-            "⌕  BUSCAR  Ctrl+K",
-            self.navegacao.get("busca"),
-            tipo="secundario",
-            compacto=True,
-        ).pack(side="right")
         criar_cabecalho(
             conteudo,
             "Central da aplicação",
             "Visão geral e acesso seguro às principais áreas da plataforma.",
-            acao=acoes_cabecalho,
             breadcrumb=self._breadcrumb(),
             etiqueta=f"INTERFACE {VERSAO_INTERFACE}",
         )
@@ -75,13 +68,27 @@ class TelaPrincipal:
         corpo = tk.Frame(conteudo, bg=CORES["bg"])
         corpo.pack(fill="both", expand=True, pady=(14, 0))
         esquerda = tk.Frame(corpo, bg=CORES["bg"])
-        esquerda.pack(side="left", fill="both", expand=True, padx=(0, 7))
-        direita = tk.Frame(corpo, bg=CORES["bg"], width=330)
-        direita.pack(side="right", fill="y", padx=(7, 0))
-        direita.pack_propagate(False)
+        direita = tk.Frame(corpo, bg=CORES["bg"])
         self._atividades(esquerda)
         self._saude_plataforma(direita)
         self._alertas(direita)
+
+        def reorganizar(evento=None):
+            largura = (evento.width if evento else corpo.winfo_width())
+            esquerda.grid_forget()
+            direita.grid_forget()
+            corpo.grid_columnconfigure(0, weight=1)
+            corpo.grid_columnconfigure(1, weight=0)
+            if largura >= 900:
+                corpo.grid_columnconfigure(1, weight=0, minsize=315)
+                esquerda.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
+                direita.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+            else:
+                esquerda.grid(row=0, column=0, columnspan=2, sticky="nsew")
+                direita.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+
+        corpo.bind("<Configure>", reorganizar, add="+")
+        corpo.after_idle(reorganizar)
 
     def _breadcrumb(self):
         usuario = SESSAO.usuario or {}
@@ -93,7 +100,7 @@ class TelaPrincipal:
         return f"{self.contexto['empresa_nome'].upper()}  /  {filial.upper()}  /  {perfil.upper()}"
 
     def _metricas(self, parent):
-        grade = tk.Frame(parent, bg=CORES["bg"])
+        grade = GradeResponsiva(parent, max_colunas=4, largura_minima=220, bg=CORES["bg"])
         grade.pack(fill="x")
         for indice, (titulo, valor, formato, cor, icone) in enumerate(self._selecionar_indicadores()):
             card = criar_metrica(
@@ -104,12 +111,7 @@ class TelaPrincipal:
                 cor=cor,
                 detalhe="Contexto empresarial atual",
             )
-            card.pack(
-                side="left",
-                fill="both",
-                expand=True,
-                padx=(0, 10) if indice < 3 else 0,
-            )
+            grade.adicionar(card)
 
     def _ferramentas_corporativas(self, parent):
         card = criar_card(parent)
@@ -117,7 +119,7 @@ class TelaPrincipal:
         interior = tk.Frame(card, bg=CORES["card"])
         interior.pack(fill="x", padx=17, pady=12)
         titulo = tk.Frame(interior, bg=CORES["card"])
-        titulo.pack(side="left", padx=(0, 18))
+        titulo.pack(fill="x", padx=(0, 18), pady=(0, 8))
         tk.Label(
             titulo,
             text="Ferramentas corporativas",
@@ -127,26 +129,34 @@ class TelaPrincipal:
         ).pack(anchor="w")
         tk.Label(
             titulo,
-            text="Interfaces preparadas para integração",
+            text="Serviços conectados ao backend local",
             font=FONTES["micro"],
             fg=CORES["text_muted"],
             bg=CORES["card"],
         ).pack(anchor="w", pady=(2, 0))
-        for icone, texto in (
-            ("✓", "Tarefas"),
-            ("▤", "Documentos"),
-            ("↻", "Workflow Builder"),
-            ("∞", "Integrações"),
-            ("▥", "Relatórios"),
-            ("◉", "Auditoria"),
+        grade = GradeResponsiva(
+            interior,
+            max_colunas=6,
+            largura_minima=135,
+            gap=4,
+            bg=CORES["card"],
+        )
+        grade.pack(fill="x")
+        for chave, icone, texto in (
+            ("tarefas", "✓", "Tarefas"),
+            ("documentos", "▤", "Documentos"),
+            ("workflows", "↻", "Workflow Builder"),
+            ("integracoes", "∞", "Integrações"),
+            ("relatorios", "▥", "Relatórios"),
+            ("auditoria", "◉", "Auditoria"),
         ):
-            criar_botao(
-                interior,
+            grade.adicionar(criar_botao(
+                grade,
                 f"{icone}  {texto}",
-                acao_em_preparacao(texto),
+                lambda destino=chave: self.navegacao["ferramenta"](destino),
                 tipo="fantasma",
                 compacto=True,
-            ).pack(side="left", padx=4)
+            ))
 
     def _selecionar_indicadores(self):
         resumos = self.dados["modulos"]
@@ -177,8 +187,15 @@ class TelaPrincipal:
             bloco,
             "Acesso rápido",
             "A Central analítica e as áreas departamentais ficam dentro de Módulos.",
+            acao=lambda area: criar_botao(
+                area,
+                "⌕  BUSCAR  Ctrl+K",
+                self.navegacao.get("busca"),
+                tipo="secundario",
+                compacto=True,
+            ),
         )
-        grade = tk.Frame(bloco, bg=CORES["bg"])
+        grade = GradeResponsiva(bloco, max_colunas=4, largura_minima=235, bg=CORES["bg"])
         grade.pack(fill="x")
         usuario_admin = SESSAO.eh_admin()
         atalhos = [
@@ -198,7 +215,7 @@ class TelaPrincipal:
             ),
             (
                 "◌",
-                "Central de alertas",
+                "Central de notificações",
                 "Acompanhe avisos, pendências e eventos dos workflows.",
                 self.navegacao.get("notificacoes"),
                 CORES["warning"],
@@ -220,30 +237,24 @@ class TelaPrincipal:
                 acao=acao,
                 cor=cor,
             )
-            card.pack(
-                side="left",
-                fill="both",
-                expand=True,
-                padx=(0, 10) if indice < 3 else 0,
-            )
+            grade.adicionar(card)
 
     def _atividades(self, parent):
         card = criar_card(parent)
         card.pack(fill="both", expand=True)
         interior = tk.Frame(card, bg=CORES["card"])
         interior.pack(fill="both", expand=True, padx=18, pady=16)
-        botao = criar_botao(
-            interior,
-            "VER MÓDULOS  →",
-            self.navegacao.get("modulos"),
-            tipo="fantasma",
-            compacto=True,
-        )
         criar_titulo_secao(
             interior,
             "Atividade recente",
             "Eventos autorizados no contexto empresarial atual.",
-            acao=botao,
+            acao=lambda area: criar_botao(
+                area,
+                "VER MÓDULOS  →",
+                self.navegacao.get("modulos"),
+                tipo="fantasma",
+                compacto=True,
+            ),
         )
         cab = tk.Frame(interior, bg=CORES["card_secundario"])
         cab.pack(fill="x", pady=(4, 2))
@@ -251,7 +262,7 @@ class TelaPrincipal:
             tk.Label(
                 cab,
                 text=texto,
-                font=("Segoe UI", 7, "bold"),
+                font=("Segoe UI", 9, "bold"),
                 fg=CORES["text_muted"],
                 bg=CORES["card_secundario"],
                 anchor="w",
@@ -280,7 +291,7 @@ class TelaPrincipal:
             tk.Label(
                 linha,
                 text="●",
-                font=("Segoe UI", 7),
+                font=("Segoe UI", 9),
                 fg=cor,
                 bg=CORES["card"],
             ).pack(side="left", padx=(9, 7), pady=9)
@@ -367,18 +378,17 @@ class TelaPrincipal:
         card.pack(fill="both", expand=True, pady=(14, 0))
         interior = tk.Frame(card, bg=CORES["card"])
         interior.pack(fill="both", expand=True, padx=17, pady=16)
-        botao = criar_botao(
-            interior,
-            "VER TODOS",
-            self.navegacao.get("notificacoes"),
-            tipo="fantasma",
-            compacto=True,
-        )
         criar_titulo_secao(
             interior,
             "Alertas recentes",
             f"{len(self.dados['notificacoes'])} não lido(s).",
-            acao=botao,
+            acao=lambda area: criar_botao(
+                area,
+                "VER TODOS",
+                self.navegacao.get("notificacoes"),
+                tipo="fantasma",
+                compacto=True,
+            ),
         )
         notificacoes = self.dados["notificacoes"]
         if not notificacoes:
