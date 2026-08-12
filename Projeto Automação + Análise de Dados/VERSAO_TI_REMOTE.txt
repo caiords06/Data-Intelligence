@@ -1,0 +1,5 @@
+Data Intelligence Enterprise Platform
+Tecnologia 3.0.1 + Central TI API 1.0 + Agente TI 1.1
+Preparado para build Windows via scripts\build_distribuicao_windows.ps1
+
+Hotfix 1.1.1: fechamento explícito de handles SQLite no Windows durante testes, backups e importação SQLite.

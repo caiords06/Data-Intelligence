@@ -1,0 +1,44 @@
+VALIDAÇÃO DA ENTREGA · RECURSOS HUMANOS 2.0
+================================================
+
+Data da validação: 10/08/2026
+
+Comandos executados:
+
+1. python -m unittest discover -s tests
+   Resultado: 99 testes aprovados; 7 smoke tests gráficos ignorados por
+   exigirem display Tkinter e opt-in RUN_TK_SMOKE=1.
+
+2. python -m compileall -q .
+   Resultado: aprovado.
+
+3. python -m tabnanny .
+   Resultado: aprovado, sem inconsistências de indentacão.
+
+4. Parse AST de todos os arquivos Python
+   Resultado: aprovado.
+
+5. Inicialização do banco empresarial
+   Resultado:
+   - PRAGMA foreign_keys = 1;
+   - 24 tabelas rh_* disponíveis;
+   - enterprise_006_rh_departamental aplicada;
+   - enterprise_007_rh_2_0_complementos aplicada.
+
+Cobertura funcional dedicada:
+- cadastro mestre e migração legada;
+- admissão e tarefas interdepartamentais;
+- desligamento bloqueado por pendências;
+- férias, conflito de datas e aprovação;
+- benefícios, folha, contracheque e integração financeira;
+- ponto, cargos, vagas, desempenho, PDI e treinamentos;
+- documentos, equipamentos, solicitações, auditoria e Analytics;
+- proteção de remuneração;
+- escopo próprio do colaborador e equipe direta do gestor;
+- regressão do Financeiro 2.0 e dos demais módulos.
+
+Limites mantidos de forma explícita:
+- não é uma folha legal/fiscal;
+- não calcula eSocial, rescisão oficial ou tributos;
+- não envia e-mail sem provedor e credenciais configurados;
+- não realiza assinatura digital homologada.

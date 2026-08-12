@@ -1,0 +1,26 @@
+Data Intelligence Enterprise Platform — TI Remote 1.1.1 Hotfix Windows
+
+Motivo:
+- Build no Windows interrompido por PermissionError [WinError 32] em bancos SQLite temporários ainda abertos.
+
+Correções:
+- enterprise/backups.py: fechamento explícito das conexões SQLite de backup/verificação.
+- dados/fontes.py: fechamento explícito da conexão de importação SQLite.
+- tests/test_estabilizacao_v5_1.py: commit + fechamento do banco legado temporário.
+- tests/test_v8_backend.py: commit + fechamento do banco externo temporário.
+
+Validação específica do lote que falhava no Windows:
+- 51 passed
+- 19 subtests passed
+
+Validações complementares executadas antes do empacotamento:
+- backend complementar: 43 passed
+- TI/servidor/agente: 43 passed
+- interface V7: 7 passed, 11 subtests passed
+- estabilização V8.1: 5 passed
+- interface smoke V8.2: 9 skipped sem RUN_TK_SMOKE (comportamento esperado)
+- compileall: OK
+- tabnanny: OK
+
+Comando de build Windows:
+powershell -ExecutionPolicy Bypass -File .\scripts\build_distribuicao_windows.ps1

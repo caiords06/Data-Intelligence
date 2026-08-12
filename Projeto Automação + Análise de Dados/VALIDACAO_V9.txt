@@ -1,0 +1,50 @@
+DATA INTELLIGENCE ENTERPRISE PLATFORM V9.0
+VALIDAÇÃO FINAL DA REESTRUTURAÇÃO CORPORATIVA
+
+Compilação Python: OK
+Tabnanny: OK
+Definições globais/métodos duplicados via AST: 0
+
+Testes funcionais executados nos mesmos lotes usados pelo build Windows:
+- Grupo 1: 51 passed + 19 subtests
+- Grupo 2: 43 passed
+- Grupo 3 (interface estática/configuração): 12 passed + 1 skipped + 11 subtests
+- Grupo 4: 43 passed
+- Grupo 5 (regressões V9): 10 passed
+Subtotal funcional: 159 passed, 1 skipped, 30 subtests
+
+Smoke Tk REAL obrigatório no build Windows:
+- tests/test_interface_smoke_v8_2.py
+- tests/test_v9_interface_smoke.py
+Resultado em Xvfb: 13 passed + 70 subtests
+
+Total exercitado nesta validação: 172 testes aprovados, 1 classe de screenshots extensivos ignorada por padrão, 100 subtests aprovados.
+Os screenshots extensivos continuam opt-in; construção real das telas críticas e das experiências V9 tornou-se obrigatória no build Windows.
+
+Banco novo inicializado com migrations 001..018:
+- PRAGMA quick_check: ok
+- PRAGMA foreign_key_check: 0 violações
+- PRAGMA journal_mode: wal
+- migrations ausentes: 0
+- tabelas no schema inicializado: 157
+
+Regressões V9 incluem:
+- isolamento RH entre filiais
+- alçada financeira por perfil
+- aprovação Compras em múltiplas etapas + sincronismo da Central
+- backup completo e hashes
+- revogação de sessão por epoch
+- limite de importação local
+- sincronização valor/valor_centavos
+- servidor HTTP corporativo real em loopback
+- upload/listagem/exclusão administrativa de arquivo
+- alteração de senha remota e invalidação de bearer
+- remoção das divisórias falsas de Treeview
+- construção das oito experiências departamentais V9
+- construção dos workspaces visuais de Marketing/Administrativo/Jurídico/Comercial
+- Correio, grades especializadas e cockpit de Tecnologia em Tk real
+
+Observação:
+A geração dos executáveis Windows deve ser realizada no Windows com
+scripts/build_distribuicao_windows.ps1. O ambiente de validação desta entrega
+não produz binários Windows.

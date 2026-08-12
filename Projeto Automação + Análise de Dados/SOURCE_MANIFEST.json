@@ -1,0 +1,1458 @@
+{
+  "arquivos": [
+    {
+      "caminho": ".gitattributes",
+      "sha256": "a1039fe8da843b0398a48a0a5b7ba7aa10ed275e165b1c287f6275dc91551207",
+      "tamanho": 212
+    },
+    {
+      "caminho": ".github/workflows/quality.yml",
+      "sha256": "10e0aa4726c2b7ab03371539878f1ff2288345fb1ef5e137591c77eef035634f",
+      "tamanho": 5788
+    },
+    {
+      "caminho": ".gitignore",
+      "sha256": "6e248c1396d71f2e1be8ad04c92fda548bbbfc225769819721dc85e65324e5cf",
+      "tamanho": 578
+    },
+    {
+      "caminho": ".python-version",
+      "sha256": "a876e0b10411037a012498b9fe18d9bc1df32ed8b722a13564dc944ddcfd9135",
+      "tamanho": 5
+    },
+    {
+      "caminho": "AGENTE_TI.md",
+      "sha256": "d1aa69a3d0d6c8a30e922630791b47322fa1858728da7995197265d7dd830bdd",
+      "tamanho": 3377
+    },
+    {
+      "caminho": "CORRECOES_APLICADAS_V9_2_20260812.md",
+      "sha256": "4d3f78f12e80cee27045d1c11e73a7833ffff7fe04a6cd841a1ce3a8c7b45c01",
+      "tamanho": 4898
+    },
+    {
+      "caminho": "DataIntelligencePlatform.spec",
+      "sha256": "70e6cc498ceaba37bfd91d62e2811a6836f2a8b5e16ad80fbfe1b5b9fc910e73",
+      "tamanho": 934
+    },
+    {
+      "caminho": "DataIntelligenceServer.spec",
+      "sha256": "f9c48710382d667a4a16414a5fea9e035d7468d8abd583ed4a0f2cbc6d58a5f5",
+      "tamanho": 778
+    },
+    {
+      "caminho": "HOTFIX_PROVISIONAMENTO_AGENTE_1_1_2.md",
+      "sha256": "bbff4a81f3d72bf0cc2eb5a21148b0c15e3782255173521532fb02927ba2723e",
+      "tamanho": 962
+    },
+    {
+      "caminho": "HOTFIX_TECNOLOGIA_3_0_1.md",
+      "sha256": "c802726aaef7df033060a61c0612283d15a9aa6aa29a1a463b216bfc19d86f80",
+      "tamanho": 1244
+    },
+    {
+      "caminho": "HOTFIX_WINDOWS_SQLITE_1_1_1.md",
+      "sha256": "9f1bf2c44f93484d1fa7d0e41669d5cba148af5970a16168da179c131725ddb9",
+      "tamanho": 2127
+    },
+    {
+      "caminho": "PLANO_MIGRACAO_POSTGRESQL.md",
+      "sha256": "e34149875923a8c7c9690642ca5e84e5b8423bb4c4f2893f79630c486e5db5c3",
+      "tamanho": 1034
+    },
+    {
+      "caminho": "README.md",
+      "sha256": "c225f561446256e379a0abce2e67fe984a738607bd58eeeeb99cde79273549a9",
+      "tamanho": 31238
+    },
+    {
+      "caminho": "README_CENTRAL_TI.md",
+      "sha256": "8a721a0aafcbfe7248e88588457a91ef1696b9e4b8a3628dd3ac023a706cbff0",
+      "tamanho": 2946
+    },
+    {
+      "caminho": "README_DISPOSITIVO_TI.md",
+      "sha256": "30f8a246d2f50de999fb4cadb9c13ea802bccbcba41b514dca9637a735c5d1d6",
+      "tamanho": 1556
+    },
+    {
+      "caminho": "README_DISTRIBUICAO_WINDOWS.md",
+      "sha256": "1f89508b7e16c2daa0c82268e17ad14b0022e4a8ff8229470f57b278ec440063",
+      "tamanho": 1395
+    },
+    {
+      "caminho": "README_SERVIDOR_CORPORATIVO.md",
+      "sha256": "ab62e7118d8f2223c4f555f9274d42c67d8293d26664ad2fc159499379d3bab2",
+      "tamanho": 1963
+    },
+    {
+      "caminho": "README_V9_1_AUTORIDADE_CENTRAL.md",
+      "sha256": "e7add39a05fd13fdfb0ba10a74ec4a52c2424f990a7b1288bcb31f2ca0b4fe1a",
+      "tamanho": 4550
+    },
+    {
+      "caminho": "README_V9_3_RELEASE_ENGINEERING.md",
+      "sha256": "6b7998993be8ffcd3890696509bbb3e16238417d074dc64a717d04890dc6d79e",
+      "tamanho": 2174
+    },
+    {
+      "caminho": "README_V9_INSTALACAO_E_ARQUITETURA.md",
+      "sha256": "a2957b161f1929d61f9eb81a0c2a7f58c289f5e844b2eb39b0714e71314fd04b",
+      "tamanho": 9341
+    },
+    {
+      "caminho": "RELATORIO_AGENTE_TI_1_0.md",
+      "sha256": "46056d7c3efebfe209bf08723c64e85fe02364c31e61ceeaa103da65ac4760da",
+      "tamanho": 1478
+    },
+    {
+      "caminho": "RELATORIO_COMPRAS_2_0.md",
+      "sha256": "97af5d7e202aec4b30465c06c5863a15c87a8326d9d7e418fcb1722e8864bf6a",
+      "tamanho": 6342
+    },
+    {
+      "caminho": "RELATORIO_CORRECOES_V8_2.md",
+      "sha256": "3b1b4addf0df1f049092fddd08638a377a092483c53c0c59b410137d8ad83f6c",
+      "tamanho": 14323
+    },
+    {
+      "caminho": "RELATORIO_CORRECOES_V8_2_1.md",
+      "sha256": "f5d8303eafc8ff9c7d6320579bc7738f5b2912d39025f05bdb69679c9f6a5d4d",
+      "tamanho": 8650
+    },
+    {
+      "caminho": "RELATORIO_ESTOQUE_2_0.md",
+      "sha256": "5b096882ae9ae4afbd758419635d73343c5531d181603bfd0f82541509b8070f",
+      "tamanho": 5554
+    },
+    {
+      "caminho": "RELATORIO_FINANCEIRO_2_0.md",
+      "sha256": "e12010f1bbf43f4cdb9e1d13b204fd9752e7fe96db68e75afdfb11956c075f79",
+      "tamanho": 6529
+    },
+    {
+      "caminho": "RELATORIO_INTEGRACAO_TI_AGENT_1_1.md",
+      "sha256": "a810781a49705ae4101c8b4f5d8d5246b40753bd94ab40211a17355171d65835",
+      "tamanho": 5164
+    },
+    {
+      "caminho": "RELATORIO_OTIMIZACAO.md",
+      "sha256": "3a1a25bda2eda388eeb339d59c2386e5ad104eea592e6ed415d0e02003fa59ae",
+      "tamanho": 22057
+    },
+    {
+      "caminho": "RELATORIO_RH_2_0.md",
+      "sha256": "5ffa1a5483b1672cf4d78687c360398622bd93043585cc58e77fcd48566293b6",
+      "tamanho": 6790
+    },
+    {
+      "caminho": "RELATORIO_TECNOLOGIA_2_0.md",
+      "sha256": "b032fa5ea40f53be5cea2b3afaff670165762509524bcdf2a8c9e598e499b9d6",
+      "tamanho": 3976
+    },
+    {
+      "caminho": "RELATORIO_TECNOLOGIA_3_0.md",
+      "sha256": "dcf0ceac5d48376e5f4821b2969e7a799e68702f5ff2539f5c19e1b06efb967e",
+      "tamanho": 9074
+    },
+    {
+      "caminho": "RELATORIO_V3_2.md",
+      "sha256": "f6276ec936d214427b9b8581d7374ed026cdd26726fc8b3fea3b11858aa7cc56",
+      "tamanho": 3167
+    },
+    {
+      "caminho": "RELATORIO_V4.md",
+      "sha256": "5f65a297e1fb99ef0744845c0f77e075df2e28d1a6530fdbeb7dde4ce0289cfc",
+      "tamanho": 2583
+    },
+    {
+      "caminho": "RELATORIO_V5.md",
+      "sha256": "a74f975b92cc10c4ff49dec4115aa08719711f6b859b02b2bd90271a4ecfe645",
+      "tamanho": 3017
+    },
+    {
+      "caminho": "RELATORIO_V5_1.md",
+      "sha256": "259ba9d3cef7a73cd76af4ba42dd65f1ff445e6d3da48e3417fc8206edfb9aeb",
+      "tamanho": 2241
+    },
+    {
+      "caminho": "RELATORIO_V6.md",
+      "sha256": "36eec3aba7829288319625e56c958cd9e4cf1a7894bc8ae8e2ebcef5520662fc",
+      "tamanho": 3273
+    },
+    {
+      "caminho": "RELATORIO_V7_FRONTEND.md",
+      "sha256": "0bbc91108b0721baf0784701d8648ef5547e5dc3e353a3ce8328203acc5e8c4f",
+      "tamanho": 3179
+    },
+    {
+      "caminho": "RELATORIO_V8.md",
+      "sha256": "845c9cd323518787333d18e1c8f3b64a12fa03d299b0fde9e1c62ec7f2b96c1e",
+      "tamanho": 1866
+    },
+    {
+      "caminho": "RELATORIO_V8_1.md",
+      "sha256": "c888b465759cf4c90e21623b5ef621a19b4426467791b4fe77c744fbfc769d7d",
+      "tamanho": 3444
+    },
+    {
+      "caminho": "RELATORIO_V9_1_AUTORIDADE_CENTRAL.md",
+      "sha256": "3345150dd356671b55348b1f4c1eef994d06378d75f414b07f4e95227c285ca0",
+      "tamanho": 2197
+    },
+    {
+      "caminho": "RELATORIO_V9_3_RELEASE.md",
+      "sha256": "6b8b9d92ed5ccb25efad953d4725ce933235b526a365d839dc90a4eb6ec3482d",
+      "tamanho": 4011
+    },
+    {
+      "caminho": "RELATORIO_V9_INTEGRADA.md",
+      "sha256": "e3b21bf442e4fbd8df4250dec2553cebb1efdc62a49577f7225da8a8118568d4",
+      "tamanho": 2972
+    },
+    {
+      "caminho": "RELATORIO_V9_REESTRUTURACAO.md",
+      "sha256": "572d27f994009da163044004f78475a2f6493f3a67a3cb93bbc4820f9c72479f",
+      "tamanho": 4760
+    },
+    {
+      "caminho": "TESTES_VISUAIS.md",
+      "sha256": "d91f141ad99aea7a61081ba1b5f782493820440181b6f100acde302f886b629c",
+      "tamanho": 2474
+    },
+    {
+      "caminho": "VALIDACAO_AGENTE_TI_1_0.txt",
+      "sha256": "c41ab3690281afa01cd2ef5f4b6f7876b8acf6c58132586765d39e15f6bc53c2",
+      "tamanho": 1140
+    },
+    {
+      "caminho": "VALIDACAO_COMPRAS_2_0.txt",
+      "sha256": "a4d0e48cb96efb9461cd7315737d6d4fa21ef7a72cfaed87c63918b881d5ba26",
+      "tamanho": 1171
+    },
+    {
+      "caminho": "VALIDACAO_ESTOQUE_2_0.txt",
+      "sha256": "2b1f7693414e362a4493a68ecc4242467a0ceb71018a02af762007208028d4a8",
+      "tamanho": 1578
+    },
+    {
+      "caminho": "VALIDACAO_HOTFIX_WINDOWS_1_1_1.txt",
+      "sha256": "f660040978d05b850ab85997b6be1f631d520d4d7ce9b13f5f87bb9cf2cfae26",
+      "tamanho": 1055
+    },
+    {
+      "caminho": "VALIDACAO_PROVISIONAMENTO_AGENT_1_1_2.txt",
+      "sha256": "a69862afc8379ba3288ae32c86a43c75ef195e0baa6bc54f22275e66caa160ea",
+      "tamanho": 743
+    },
+    {
+      "caminho": "VALIDACAO_RH_2_0.txt",
+      "sha256": "a7d9ede8da9467be44d0d25b4bd72831cff5d6748e9b4e9124ccdc33402017bc",
+      "tamanho": 1505
+    },
+    {
+      "caminho": "VALIDACAO_TECNOLOGIA_2_0.txt",
+      "sha256": "b781705aefb9b94e68249b5022be7668d6bb2e363adfc1285a82b64fb7342134",
+      "tamanho": 1786
+    },
+    {
+      "caminho": "VALIDACAO_TECNOLOGIA_3_0.txt",
+      "sha256": "84827312ab802e76d59e7e930e6685ec1a7b86f5edf0658b84fec18e6c995842",
+      "tamanho": 1213
+    },
+    {
+      "caminho": "VALIDACAO_TI_AGENT_1_1.txt",
+      "sha256": "6714ba12b73132d6344dacf3f002a72c978b1ed7ede84976af2c89ae2fdabc58",
+      "tamanho": 1274
+    },
+    {
+      "caminho": "VALIDACAO_V9.txt",
+      "sha256": "2314bab7249abcd66bf5f89a6bb7a43fd1530fc5e63ba9c16624fb44e0694094",
+      "tamanho": 2061
+    },
+    {
+      "caminho": "VALIDACAO_V9_1.txt",
+      "sha256": "f39da8a68ef2f67e8340689d635032f1327d2b193603742fab1c9675dd3a79c8",
+      "tamanho": 1236
+    },
+    {
+      "caminho": "VERSAO_TI_REMOTE.txt",
+      "sha256": "aff39e325037583cd01f5f004eb56198f63a3bb5d4ba7759f765b9f5d8370f8a",
+      "tamanho": 277
+    },
+    {
+      "caminho": "VERSAO_V9.txt",
+      "sha256": "ccafe7243ece5f9637245e52f8ddfd27215a5b73b288471bb1f17c0d4adc9325",
+      "tamanho": 260
+    },
+    {
+      "caminho": "VERSAO_V9_1.txt",
+      "sha256": "2726e15de710b6d7feb22cc6e8465e1da348d64804e373bc66e68ff7ed0368c2",
+      "tamanho": 530
+    },
+    {
+      "caminho": "VERSAO_V9_3.txt",
+      "sha256": "1da39e3e0ccdf29dd5fe940ab2ce4fe2042513b29c9217ec4bdbb68377862f8c",
+      "tamanho": 496
+    },
+    {
+      "caminho": "agente_ti.spec",
+      "sha256": "19fa6e2dac1fbaac22f4f63c39d723d47add43dcf31a9ee7b5d2babaf7646b19",
+      "tamanho": 693
+    },
+    {
+      "caminho": "agente_ti/__init__.py",
+      "sha256": "ab5be9de03f4423d65bdc2e97093da4c1712d1f95ae523358d8525191516bf47",
+      "tamanho": 201
+    },
+    {
+      "caminho": "agente_ti/__main__.py",
+      "sha256": "eb3db4b765828f4580a9a8041b30e3b7aa74775a24c01ecc09303368a2195cd2",
+      "tamanho": 89
+    },
+    {
+      "caminho": "agente_ti/cli.py",
+      "sha256": "4636e7943e9c1193fc99b3e6974e9ecb79742e017ece99e8b6d92bcf8801e2d9",
+      "tamanho": 5673
+    },
+    {
+      "caminho": "agente_ti/collector.py",
+      "sha256": "15643ee3f5708ab3e49eb16917d011e3a1667027424f1b3a201ffd8846f89be2",
+      "tamanho": 8321
+    },
+    {
+      "caminho": "agente_ti/config.example.json",
+      "sha256": "12869af31921d5c2c35de80262e60cf3ea08b6decda4a6183e2c1174a80fc93f",
+      "tamanho": 316
+    },
+    {
+      "caminho": "agente_ti/config.py",
+      "sha256": "d18deba8d745417f71f1cd248de9dcb7d3406e154dedfbeb7e19194b0492e6a4",
+      "tamanho": 6137
+    },
+    {
+      "caminho": "agente_ti/credentials.py",
+      "sha256": "8042fe888c75dee35dbeee76751a4ee6b8a66607f0296eac26e71c588de271b7",
+      "tamanho": 3288
+    },
+    {
+      "caminho": "agente_ti/runtime.py",
+      "sha256": "a07e7bf12eea32e7c31a3e29dbe92bd2af393e4eba9f2230e7084b80d467f241",
+      "tamanho": 6950
+    },
+    {
+      "caminho": "agente_ti/transport.py",
+      "sha256": "8f6d5e67afe5992a17e902b4eb273f1e55b2afb03ebdda1e83dc80a9a6b0fd55",
+      "tamanho": 4372
+    },
+    {
+      "caminho": "agente_ti/windows.py",
+      "sha256": "7043bfccbecf75d19a31e6822cf54a71472503d9a0b2848b248cfa8271f75b29",
+      "tamanho": 3041
+    },
+    {
+      "caminho": "analysis/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "analysis/temporal.py",
+      "sha256": "b470da88370fde27d43f8f4db455531dfa0fa5a792a01bf6c830c8fd98c83c75",
+      "tamanho": 5483
+    },
+    {
+      "caminho": "analytics/__init__.py",
+      "sha256": "3b884e891287827c6f3ffd56f6b5a8364a8b0ea581fd94674e13b1518b1e24ba",
+      "tamanho": 663
+    },
+    {
+      "caminho": "analytics/administrativo.py",
+      "sha256": "a086e23ac99b971806bc4e6caef0804b636cd397da7e146d39bdfd5b1e82ad5a",
+      "tamanho": 1048
+    },
+    {
+      "caminho": "analytics/base.py",
+      "sha256": "65f50338fb52128a1a866c095e13bfe0ff6690a304993b8592b3c0bdea0174b7",
+      "tamanho": 2339
+    },
+    {
+      "caminho": "analytics/comercial.py",
+      "sha256": "1ca9f855233b49d606696008fa8f45d60bfcf3f06f99987a7cedf4fe45d47a32",
+      "tamanho": 1258
+    },
+    {
+      "caminho": "analytics/compras.py",
+      "sha256": "f38e5220bbdb737410e82a9a7cfb3366fc882ae6287d1b0af2d0189769ee5f59",
+      "tamanho": 1506
+    },
+    {
+      "caminho": "analytics/juridico.py",
+      "sha256": "3ba65326682d58b4483d204804325cf1b03076231d7e80c6314d9cdd72df2177",
+      "tamanho": 1264
+    },
+    {
+      "caminho": "analytics/marketing.py",
+      "sha256": "3405fd528a327454a12bfe5a4a2fabdc0bb09a4d7f026fa26639a56efed5b9aa",
+      "tamanho": 1648
+    },
+    {
+      "caminho": "analytics/ti.py",
+      "sha256": "932d602d5589b6195bb5321286102bf66371736fdb81f8d90c13bc36414a57d0",
+      "tamanho": 3234
+    },
+    {
+      "caminho": "assets/README.md",
+      "sha256": "d4e96d4e0f3ee93e66f3913250de1135149f59270061729143ad06536573cc38",
+      "tamanho": 700
+    },
+    {
+      "caminho": "assets/backgrounds/login_background_v7.png",
+      "sha256": "aef4c1d243c1633e939e658ede232f8627fb7f33a1f7f8175a932f11001c1d8e",
+      "tamanho": 1684867
+    },
+    {
+      "caminho": "assets/illustrations/login_ecossistema_transparente_v7.png",
+      "sha256": "3254bfa156ee0f6fb650dfa6b39dcb144f8c3093bd65c94272e317ae682a2253",
+      "tamanho": 872347
+    },
+    {
+      "caminho": "assets/illustrations/login_ecossistema_transparente_v8.png",
+      "sha256": "e58a64e5d2ba5f52ef84a8f489db9c62dba227a54d13d6bd97f6750314090d55",
+      "tamanho": 1202739
+    },
+    {
+      "caminho": "assets/illustrations/login_ecossistema_v7.png",
+      "sha256": "f1e7d23c7c8aa5b50e2b3cf3e5e3292c9b91f6a645ab9e6f51dfd72c44525100",
+      "tamanho": 1659171
+    },
+    {
+      "caminho": "assets/previews/tecnologia_3_0/ativos_gerenciados.png",
+      "sha256": "81fd851041d8d1d0e4a7a001f31109565ca9a31c5c086a80b11785bc7197a546",
+      "tamanho": 101581
+    },
+    {
+      "caminho": "assets/previews/tecnologia_3_0/cockpit_ti.png",
+      "sha256": "0228c4ceef006c0c95f2db582262259d1bd5339ec996ad747354cb7d48df1640",
+      "tamanho": 82097
+    },
+    {
+      "caminho": "assets/previews/tecnologia_3_0/portal_suporte.png",
+      "sha256": "4896da47b8cd8631aa3c9a0f5d90b54ddf05b931bb3088ebc30c4b59cde4ceea",
+      "tamanho": 75846
+    },
+    {
+      "caminho": "assets/previews/tecnologia_3_0/rede_ao_vivo.png",
+      "sha256": "bd0efc3e43d26e9cc71ca28a5ff0b4bd44c1cd15e93ce905c40c0fed31f5b6bd",
+      "tamanho": 113372
+    },
+    {
+      "caminho": "auth/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "auth/autenticacao.py",
+      "sha256": "a5dafca4432a69a0dda5a49dc9c4d5bf58c41fe0c7c7563d9897001501880558",
+      "tamanho": 11434
+    },
+    {
+      "caminho": "auth/banco.py",
+      "sha256": "5a92315f9d58682e49e154e094d4662b8d2d534383f96f08a821409baf8d42d1",
+      "tamanho": 15270
+    },
+    {
+      "caminho": "auth/mfa.py",
+      "sha256": "9d270718012f654a50cb11a874bc8e949617ac9ba00c42f45a945d60da60ce82",
+      "tamanho": 4430
+    },
+    {
+      "caminho": "auth/seguranca.py",
+      "sha256": "bde3d8447c78d8c5e5d5400bdd35290f4d4e39696771958b3bb0793d4ba8bec3",
+      "tamanho": 1913
+    },
+    {
+      "caminho": "auth/sessao.py",
+      "sha256": "67c82613449c4fb57a15ddbac4689f2b779625b929407152677ababb6f0c3d44",
+      "tamanho": 3265
+    },
+    {
+      "caminho": "automacao/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "automacao/driver.py",
+      "sha256": "b70e8b0a936d38cc6e9f2f96977d619adfdf1721b0ab5020e2bba6de1d1526c6",
+      "tamanho": 1041
+    },
+    {
+      "caminho": "configuracoes/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "configuracoes/perfis.py",
+      "sha256": "4b0be04c4e419722213ce115c5123e9c6a7f00df9a71cf6472e340770f00febb",
+      "tamanho": 2283
+    },
+    {
+      "caminho": "configuracoes/preferencias.py",
+      "sha256": "f7f7a43519fc487ba778554d6e4d6d43a7ff749a9fd49286f8003e3470b9f647",
+      "tamanho": 3248
+    },
+    {
+      "caminho": "configuracoes/settings.py",
+      "sha256": "0416d5297d8f5356c5941d5c5424fd8a6d9bbae3b1e25c16f95f475fd7eadf04",
+      "tamanho": 300
+    },
+    {
+      "caminho": "core/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "core/caminhos.py",
+      "sha256": "a6469a24ed0d317cee717dbdc19912e84295d898c4ea0d839c9860935317aeed",
+      "tamanho": 1523
+    },
+    {
+      "caminho": "core/nodo.py",
+      "sha256": "1653d899611927441cedc1f513f74a6ce854f749232904c93e36a53b09d8492a",
+      "tamanho": 5239
+    },
+    {
+      "caminho": "core/orquestrador.py",
+      "sha256": "d918aa62caa23e7b8f1151d05122dfeb2632747824c1ff1cbc313e7abc7de466",
+      "tamanho": 24906
+    },
+    {
+      "caminho": "core/rpc_central.py",
+      "sha256": "e0a2271f776c1863b1048da88e8c9e29f4fd8e545c127c54ff509e2b220fa0f4",
+      "tamanho": 12189
+    },
+    {
+      "caminho": "core/versao.py",
+      "sha256": "4c5befcd7b0536053555d818e4a44e9aafc8c287dda4b68390eb72ca1a0d8f62",
+      "tamanho": 312
+    },
+    {
+      "caminho": "dados/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "dados/analisador.py",
+      "sha256": "c12869871b0d99b90c96f09982f32efe3d19bd54d74bdccd98669ed81cb26f8d",
+      "tamanho": 2592
+    },
+    {
+      "caminho": "dados/classificador.py",
+      "sha256": "fec3a12e35cc03e60f780649a00acf2045e01c4c32fb5919daa443475053f5fb",
+      "tamanho": 12903
+    },
+    {
+      "caminho": "dados/estrutural.py",
+      "sha256": "09518b53d3f39518e2854fb1c7df4b12e240f233489bd802df8b0df75f70f2ce",
+      "tamanho": 2139
+    },
+    {
+      "caminho": "dados/fontes.py",
+      "sha256": "0bd312d05b2f9a1efa0307bf6f8e4bf0a77ff2a90959d29f804e518b0fada589",
+      "tamanho": 8412
+    },
+    {
+      "caminho": "dados/inconsistencias.py",
+      "sha256": "4f65a26b388673d2ff9a01b65fe43874d65641bc09f5caf1998cd7098cb759f4",
+      "tamanho": 5237
+    },
+    {
+      "caminho": "dados/indicadores.py",
+      "sha256": "239f3937d4c18dcbc61dfe2e3c5518932f44c9a8135a1bd84a93cf17d1c62aa0",
+      "tamanho": 16784
+    },
+    {
+      "caminho": "dados/leitor.py",
+      "sha256": "0b7c805c1e97e0d0f66a8f048ccaefb86d69c5162950b8d5250698f7f6a31662",
+      "tamanho": 7387
+    },
+    {
+      "caminho": "dados/periodos.py",
+      "sha256": "19f649adc324a51109a049b6904b50c568f6ddd92841bcb58fa5b803f5ff0ba9",
+      "tamanho": 4926
+    },
+    {
+      "caminho": "dados/qualidade.py",
+      "sha256": "03dc2039331bd09e8612281a6dd34ca71fe43c5bad48afb60b6c5227294ae430",
+      "tamanho": 4785
+    },
+    {
+      "caminho": "dados/qualidade_base.py",
+      "sha256": "6fd3ad40339408a21faeec072d134b764f83bbcd196fcd3d86d9ce89b9144051",
+      "tamanho": 219
+    },
+    {
+      "caminho": "dados/tratamento.py",
+      "sha256": "98d5e67224f2ab0c009f11492c906eae3c53d4be9eae35e8d1aa952911223e0b",
+      "tamanho": 7375
+    },
+    {
+      "caminho": "dados_exemplo/Vendas - Dez.xlsx",
+      "sha256": "3579455b73e2107eff9bf2e016db0b59032c50ea2146202e32bca376a7efa589",
+      "tamanho": 302768
+    },
+    {
+      "caminho": "docs/ARQUITETURA_CANONICA_V9_2.md",
+      "sha256": "e5d1f51d901f01dd8c8309daeec2759d40176bb13f7962e498109d9ab92e0a9b",
+      "tamanho": 1789
+    },
+    {
+      "caminho": "docs/ARQUITETURA_DISTRIBUIDA.md",
+      "sha256": "f395950ac907ddb1d1a5b477bbfab4bb63c85c58415d8ca767a278c3c93cda5c",
+      "tamanho": 1926
+    },
+    {
+      "caminho": "docs/IMPLANTACAO_SERVIDOR_AGENTE.md",
+      "sha256": "82ba816b40d1ce8bd8f1c67e7df573011a4bf83bf38114da92727b9a85f99716",
+      "tamanho": 1778
+    },
+    {
+      "caminho": "docs/MIGRATIONS_LEGADAS_V9_3.md",
+      "sha256": "6f1438a2c0c0e204a784ac2ff1cae278b317b36cd6ee069079546418a39bbf6f",
+      "tamanho": 1111
+    },
+    {
+      "caminho": "docs/SEGURANCA_BACKUP_V9.md",
+      "sha256": "0fc14a29936272f854c330e193b49de2aa2c66416bd0701989402cd77dfa66fe",
+      "tamanho": 1264
+    },
+    {
+      "caminho": "enterprise/__init__.py",
+      "sha256": "2eb3d51d002823d375eb602f5b3e8d3b475d94cf530f745ff346ed28e222756d",
+      "tamanho": 140
+    },
+    {
+      "caminho": "enterprise/backups.py",
+      "sha256": "5701a8295187a99d6fb3db7439308a76235119c1dc2d0ce4aa3b1d489fd97890",
+      "tamanho": 10222
+    },
+    {
+      "caminho": "enterprise/banco.py",
+      "sha256": "14ca098253d09877fe419d3e1038d7de7fa1571404714d4cbe84964703c826be",
+      "tamanho": 21236
+    },
+    {
+      "caminho": "enterprise/catalogo.py",
+      "sha256": "21c00d0ab0bdeb51d448614661727a6b8b6c26fcd9d616ced03759d5dede4571",
+      "tamanho": 9671
+    },
+    {
+      "caminho": "enterprise/central.py",
+      "sha256": "1fde5351e35319cfcc55a165a90ce1bdec03d15106de7bfabe857f0548b2da0d",
+      "tamanho": 16737
+    },
+    {
+      "caminho": "enterprise/compras.py",
+      "sha256": "53ca218eccc0e9b3ff496a9c14842bdd03569d2d6bf1253f3f8dbe96c3d7ab82",
+      "tamanho": 113346
+    },
+    {
+      "caminho": "enterprise/comunicacao.py",
+      "sha256": "5ecdb2b5447ebbb65890da0480dcd4b7ee30c598e925a613d1bf74c977bf8b72",
+      "tamanho": 11949
+    },
+    {
+      "caminho": "enterprise/contexto.py",
+      "sha256": "13326a1b3f7f5fe79df89c017105fe96e5fc8dc06795df1638ecb3c460bbad09",
+      "tamanho": 16634
+    },
+    {
+      "caminho": "enterprise/correio.py",
+      "sha256": "467f15be2a15fed2ee508fcd8aa68707786bbf5952b274af628a4f4b8987a01a",
+      "tamanho": 15707
+    },
+    {
+      "caminho": "enterprise/datasets.py",
+      "sha256": "d5e2996534c9ef682587365f81270894b4febab13cac3ec2c38619fcef2b9b30",
+      "tamanho": 12589
+    },
+    {
+      "caminho": "enterprise/estoque.py",
+      "sha256": "086ed8dd84eaa545f67721ad4ea14fb1c318663e1f966f2a27838c7dcc324717",
+      "tamanho": 101292
+    },
+    {
+      "caminho": "enterprise/ferramentas.py",
+      "sha256": "7fef25f85a7031d532acf4c56b2d8dc5312920d8c4b5dcdb3ce8b43201c9bf51",
+      "tamanho": 16120
+    },
+    {
+      "caminho": "enterprise/financeiro.py",
+      "sha256": "f4ec0829c2d012c9aa1cf489889b155fa969da8f463cfaab363ef20e411cd970",
+      "tamanho": 95912
+    },
+    {
+      "caminho": "enterprise/firewall_ti.py",
+      "sha256": "74cd28343933a059bc0ad24cdbd8c369e9f8570c7288c8d9f52dcb12bc961112",
+      "tamanho": 3631
+    },
+    {
+      "caminho": "enterprise/integracoes.py",
+      "sha256": "3f6636af25e22118835644a3cbfe7b753a1998b7094cdfa8588656b672583313",
+      "tamanho": 5122
+    },
+    {
+      "caminho": "enterprise/jobs.py",
+      "sha256": "48dbda5facfb21e0d921a8f01775adad1c7734bcc50d4ef5fe8f00f2aacf4330",
+      "tamanho": 7675
+    },
+    {
+      "caminho": "enterprise/migrations/001_v6_estabilizacao.py",
+      "sha256": "1d84f61a0dc682b3b762fe33b2f958fc40a38f1a95d272f19950cceeafafcb3b",
+      "tamanho": 6994
+    },
+    {
+      "caminho": "enterprise/migrations/002_v8_recursos_departamentais.py",
+      "sha256": "6049b3c8856a7f078d5126c59fa341fffafe554409092a2d5c673c7a29552788",
+      "tamanho": 4480
+    },
+    {
+      "caminho": "enterprise/migrations/003_v8_1_integridade.py",
+      "sha256": "41e09fce593ce978bdab54e262d7e2a63af50c62dcc54c32d7af0dc8190774e5",
+      "tamanho": 7269
+    },
+    {
+      "caminho": "enterprise/migrations/004_v8_2_estabilizacao.py",
+      "sha256": "e1cf8269b69c67c3880c2c9bc68f1d9da5381fe5b4c2165110a7efec888342fb",
+      "tamanho": 9270
+    },
+    {
+      "caminho": "enterprise/migrations/005_financeiro_departamental.py",
+      "sha256": "38fa1e98776ca068a54c892b3de72e73a9a28bb8b185ef0c1f6f2b04cc533490",
+      "tamanho": 23556
+    },
+    {
+      "caminho": "enterprise/migrations/006_rh_departamental.py",
+      "sha256": "f782d9610bc972e775f667cd1cd251a564d9a8a37c14c9b4530e47ce29bbaa11",
+      "tamanho": 21728
+    },
+    {
+      "caminho": "enterprise/migrations/007_rh_2_0_complementos.py",
+      "sha256": "c090e40e5ada4d07f374e55dfc708dcc83d02a510760dcd7e37e0d5112c4092c",
+      "tamanho": 2014
+    },
+    {
+      "caminho": "enterprise/migrations/008_estoque_departamental.py",
+      "sha256": "f78b621d8c36389f16e58fb3230f9552723dfee5faa7240ac36b6ada07f607f1",
+      "tamanho": 26889
+    },
+    {
+      "caminho": "enterprise/migrations/009_compras_departamental.py",
+      "sha256": "d6bcec31b62748b30e04ca89575580b7ce93ab6fcc6d3a45c5c4d69e09767273",
+      "tamanho": 30338
+    },
+    {
+      "caminho": "enterprise/migrations/010_tecnologia_departamental.py",
+      "sha256": "4211756424a7d2a24251bcf82da3beeec6a057d982fea53a75b417739dd2b2a8",
+      "tamanho": 25011
+    },
+    {
+      "caminho": "enterprise/migrations/011_tecnologia_operacoes_rede.py",
+      "sha256": "04ba044e880ecbfec6859f8902c5522521c67dd38cc67f34b7b0104f845a9d0b",
+      "tamanho": 2093
+    },
+    {
+      "caminho": "enterprise/migrations/012_segmentos_rede_multifilial.py",
+      "sha256": "971e25855919eec7b33ea4e1967203e09f39d518a253c8c5d21bd98f26ebe966",
+      "tamanho": 4072
+    },
+    {
+      "caminho": "enterprise/migrations/013_agentes_ti_api.py",
+      "sha256": "59580a29e0a63412280f06ef483d0d80fee2f3fe813d7988bca918dfe982736b",
+      "tamanho": 1833
+    },
+    {
+      "caminho": "enterprise/migrations/014_colaboracao_email_sessoes.py",
+      "sha256": "1c65633094ab25b5b1b07718b235483405517b47d806e6843c8960d0dbfee071",
+      "tamanho": 5109
+    },
+    {
+      "caminho": "enterprise/migrations/015_aprovacoes_compras.py",
+      "sha256": "2ac984a51ebbb7db77e9cba312dece8335d2e654e6b392d7aef2ad8ce597f413",
+      "tamanho": 1282
+    },
+    {
+      "caminho": "enterprise/migrations/016_relatorios_formatos.py",
+      "sha256": "3eeda69b1385794724f784f7d326954ef559003d70cadf13cc751eafed37241d",
+      "tamanho": 2699
+    },
+    {
+      "caminho": "enterprise/migrations/017_consistencia_monetaria_aprovacoes.py",
+      "sha256": "b12c42fd5f8be18416ba9d3bf86507ebcef7daff16cd14f0e51163bb83c97aec",
+      "tamanho": 2466
+    },
+    {
+      "caminho": "enterprise/migrations/018_caminhos_rh_portaveis.py",
+      "sha256": "4648f79843901505d0b87b4286529dac8bca7838b5c69d5728ea51e313c5def0",
+      "tamanho": 1036
+    },
+    {
+      "caminho": "enterprise/migrations/019_compatibilidade_v9_legada.py",
+      "sha256": "e9171974580cca3642541766aff05d8baafeb42144602fc4158716559e25ea57",
+      "tamanho": 8664
+    },
+    {
+      "caminho": "enterprise/migrations/__init__.py",
+      "sha256": "dbc1b5ecceaf56a89084c24270956421b19233569f55230c582ad344249068fe",
+      "tamanho": 2538
+    },
+    {
+      "caminho": "enterprise/modulos.py",
+      "sha256": "10d5fffa7c252d7b2e3fd1ac20fc6495ebfa93a859a11e65b5384e6e89bcbb22",
+      "tamanho": 39707
+    },
+    {
+      "caminho": "enterprise/nos_plataforma.py",
+      "sha256": "bfbf5e32874c0740b8c528d1df999e09b3c5ef4a7ddd17a84272ed8ad9b17bcf",
+      "tamanho": 7412
+    },
+    {
+      "caminho": "enterprise/organizacao.py",
+      "sha256": "2d05896f89649af188c35bb62e1893a62f3891ad3716a7bba43a7952516f1dc0",
+      "tamanho": 12894
+    },
+    {
+      "caminho": "enterprise/perfis_acesso.py",
+      "sha256": "dd891e5cebbe74be08ced5d4cb457f483a7397e400d33b12cfcbc34ab2f9c07a",
+      "tamanho": 10115
+    },
+    {
+      "caminho": "enterprise/recursos.py",
+      "sha256": "5c9d7236233a17000b9483697b32bca676ebff00355fdce2ae044b104084d3be",
+      "tamanho": 15450
+    },
+    {
+      "caminho": "enterprise/rede_ti.py",
+      "sha256": "0fd5eb2a2802503ad0b5bce6c37de786228dd4118215f1bf04eb9cd4f6927ef5",
+      "tamanho": 6322
+    },
+    {
+      "caminho": "enterprise/rh.py",
+      "sha256": "3d65a6476a5b7a602ac76595d594b250f050b6cd52a4c7b84cc0c605d11cbb57",
+      "tamanho": 76852
+    },
+    {
+      "caminho": "enterprise/servidor_cliente.py",
+      "sha256": "51693e339262f1063b074c0484e66511be269aae91110fda66e9e693deeb8b7d",
+      "tamanho": 14476
+    },
+    {
+      "caminho": "enterprise/tecnologia.py",
+      "sha256": "ed7a4c9ef63e11506febaeb2bd94ce6bf74cceee3963a1ce03835242e4c1fafa",
+      "tamanho": 101117
+    },
+    {
+      "caminho": "enterprise/workflows.py",
+      "sha256": "c8f00070d389c0d75a5b91fa22c9ff2697e1108cb4c82bda5fb777600069a897",
+      "tamanho": 12905
+    },
+    {
+      "caminho": "historico/__init__.py",
+      "sha256": "142663aaced04c605bd9aba8f3b6aa6666614da73046653db71fa9e4482d5660",
+      "tamanho": 59
+    },
+    {
+      "caminho": "historico/repositorio.py",
+      "sha256": "4581178fefdd402555ddfa14d23042bc07c51d595b5a05c03df7e697ff94408e",
+      "tamanho": 10730
+    },
+    {
+      "caminho": "interface/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "interface/app.py",
+      "sha256": "3a11ab2c47ffa3475f0a662a04704f38b2fa2f32662374c68ee1e4f9ad71ce5f",
+      "tamanho": 75778
+    },
+    {
+      "caminho": "interface/aprovacoes.py",
+      "sha256": "7e0e51be08e14b7524fd100063a024a6b3c5c3706438339d3f2f61c71e82d33c",
+      "tamanho": 8626
+    },
+    {
+      "caminho": "interface/busca_universal.py",
+      "sha256": "5538315e65dffd8576095feea18170f29cef04b10a6c4da52da4981c19764259",
+      "tamanho": 4038
+    },
+    {
+      "caminho": "interface/captura_visual.py",
+      "sha256": "9bdaa4249cfe829d3c01f331c8cf17d0f398415fbb409bb3d8e6857dec20b4de",
+      "tamanho": 14077
+    },
+    {
+      "caminho": "interface/catalogo_modulos.py",
+      "sha256": "2e17d2ebd00dd12fb3329b1843542f741a942ac671d89c0ca47f13dbe317657d",
+      "tamanho": 5439
+    },
+    {
+      "caminho": "interface/central_analytics.py",
+      "sha256": "647935c1107cc5e0a379f3225b189850262c68dcfd02348c673ca975a996b541",
+      "tamanho": 40343
+    },
+    {
+      "caminho": "interface/componentes.py",
+      "sha256": "805d6d55178ad1e02a746d667caf816e94790d2988186c760fedb4abbcffb910",
+      "tamanho": 32521
+    },
+    {
+      "caminho": "interface/compras.py",
+      "sha256": "9cde3f93f2232ca7c34a81de4daaaeab5c65d2d054560fe740dcb15af927396f",
+      "tamanho": 76061
+    },
+    {
+      "caminho": "interface/configuracao_modulos_ui.py",
+      "sha256": "c8ebdfc6f9f6cb783457bd3583f3d4a5a960ecdc8b2831ab5a3ef493ef8e1b9c",
+      "tamanho": 28933
+    },
+    {
+      "caminho": "interface/configuracoes_app.py",
+      "sha256": "e42aaf21e9f2c1c742eff0ba30cd96f1a0ac6b060595d81158e429e8da43ae9d",
+      "tamanho": 14800
+    },
+    {
+      "caminho": "interface/correio.py",
+      "sha256": "18dfe95f391e872399cc21c62459aa12eeb6813c299a212ac280fb7ce0818ce8",
+      "tamanho": 14263
+    },
+    {
+      "caminho": "interface/estoque.py",
+      "sha256": "0ef3009168ae50fbd9dbcf51a576b43efa0335739dc9045c8677e96f03588914",
+      "tamanho": 53722
+    },
+    {
+      "caminho": "interface/experiencias_departamentais.py",
+      "sha256": "db4c1ae6f2e2aec577007a37836fbe4cf9d696fa23b2e7cc4306554df587a3a7",
+      "tamanho": 12562
+    },
+    {
+      "caminho": "interface/ferramentas.py",
+      "sha256": "41c3e6119a12b2a7047a00a9329de0984f4f9572fa94be5695bacfbdbca7641c",
+      "tamanho": 26170
+    },
+    {
+      "caminho": "interface/financeiro.py",
+      "sha256": "8d68df706281cbb1837752abe70b064b56ccbfcd0897f9a1a2756d1edf51ba9a",
+      "tamanho": 72009
+    },
+    {
+      "caminho": "interface/grade_editavel.py",
+      "sha256": "3885d62b4f7d8ae9ebf692db913c09aad2c98d17b42b6141a1a986e951295f6c",
+      "tamanho": 4832
+    },
+    {
+      "caminho": "interface/historico.py",
+      "sha256": "a0dc903f35be9da926d2720b90b6476ea242e68154fef8caed41e2b5b3410f58",
+      "tamanho": 10936
+    },
+    {
+      "caminho": "interface/imagens.py",
+      "sha256": "bb88edd8344f70245d7b9fafbd87d178409aa19ab4394e99b882641f7338698f",
+      "tamanho": 2991
+    },
+    {
+      "caminho": "interface/login.py",
+      "sha256": "2b74c2c83ee82d5d8ddcbfc841b5095b967dc94000492b73a882c81e81e88db4",
+      "tamanho": 15518
+    },
+    {
+      "caminho": "interface/modulo_empresarial.py",
+      "sha256": "f8e658771082b96c777691df51edac738f6534d1ad86e60ed9a86bb60ad4762b",
+      "tamanho": 24883
+    },
+    {
+      "caminho": "interface/navegacao_analytics.py",
+      "sha256": "04c3c5d33ea3c4b42f05f6aaf642e857bb28dc3b3a23084ba8ef3787965f092a",
+      "tamanho": 2581
+    },
+    {
+      "caminho": "interface/nos_plataforma.py",
+      "sha256": "31fb5b41522513730c8aa5bf49d2199100ec2d58e8d7b127d6e29bc09132b02e",
+      "tamanho": 5742
+    },
+    {
+      "caminho": "interface/notificacoes.py",
+      "sha256": "2962b7cd3319b455a8cb7027f8bd7bfc4d6e88012c9dc928d7dd131a03a75f61",
+      "tamanho": 5655
+    },
+    {
+      "caminho": "interface/nova_analise.py",
+      "sha256": "f0aabdb808df63be2b012d767b65b5a5b4bbe8512c7c07ec02f2fd727e8e611c",
+      "tamanho": 30960
+    },
+    {
+      "caminho": "interface/operacoes_visuais.py",
+      "sha256": "e918a73de492a61e95b781426d6af095bcea7a71d91f829caf9e5f6d58143f3a",
+      "tamanho": 9819
+    },
+    {
+      "caminho": "interface/organizacao.py",
+      "sha256": "9e537f7b37ec236ce304520b787f63acbba13ea02c7ee5d29ac687b147ee1cc0",
+      "tamanho": 10488
+    },
+    {
+      "caminho": "interface/painel_modulo.py",
+      "sha256": "9d2707febe6ca8c507c0c9e809c73cae4427560c3d7873079103abb9ccadec94",
+      "tamanho": 36309
+    },
+    {
+      "caminho": "interface/perfis_analise.py",
+      "sha256": "2c1a16e0bf3c71c948ab42f9156f65e1d2e46896671e03be24cc9fe1a991d920",
+      "tamanho": 2982
+    },
+    {
+      "caminho": "interface/primeiro_acesso.py",
+      "sha256": "c2d2022ac245f3e13dfcf03e6e15b6df5be785a4176ca94fe337f5ce5fac630b",
+      "tamanho": 6258
+    },
+    {
+      "caminho": "interface/principal.py",
+      "sha256": "bd7cacdaae240a4908ac6fa717e7b65872d483c1cbadcfa48304ac45480bc183",
+      "tamanho": 16747
+    },
+    {
+      "caminho": "interface/rh.py",
+      "sha256": "38958f8dfb554c57f6a5a10d9ca7d4d18ec0fc5b46999a20de30c640fe3aec34",
+      "tamanho": 47668
+    },
+    {
+      "caminho": "interface/servidor_corporativo.py",
+      "sha256": "27db601ef015f1709adfa676cb9988b6d6d7dcdf2ab9bd7dccd87b81a5360679",
+      "tamanho": 4921
+    },
+    {
+      "caminho": "interface/tecnologia.py",
+      "sha256": "f7b40cc0635d0f24aa03846632aa6205561a92a18ee8844e7367df619d7a0fac",
+      "tamanho": 103726
+    },
+    {
+      "caminho": "interface/tema.py",
+      "sha256": "5a792c58e25d31a15bcd42d9bde6c85d69ad7c9f139156e2152c3eafd9858496",
+      "tamanho": 6242
+    },
+    {
+      "caminho": "interface/usuarios.py",
+      "sha256": "a9ea26023480c1575c1608fb08dc19de44fc5c4cca98ab6bfc6ee0b6f9fe961c",
+      "tamanho": 24805
+    },
+    {
+      "caminho": "main.py",
+      "sha256": "745bbe813cae8cdcdd461d72b23eb9e0f80c8c1fa0ed718324724f11b5e0dc48",
+      "tamanho": 18107
+    },
+    {
+      "caminho": "pytest.ini",
+      "sha256": "2879f2c7c5921bee61aac03a00be2f690c2834d426d61889a2ff93500628b9dd",
+      "tamanho": 125
+    },
+    {
+      "caminho": "requirements-agent-build.txt",
+      "sha256": "dff04c6302c91be9303c7eaf6d144f97194dfad89ca83fac301efbbb87c70dee",
+      "tamanho": 150
+    },
+    {
+      "caminho": "requirements-agent.lock.txt",
+      "sha256": "2a83736ace224ff9f8a8a651f70c6ad9d9ad423b8aa9edf6242b735154b818d9",
+      "tamanho": 51
+    },
+    {
+      "caminho": "requirements-agent.txt",
+      "sha256": "f6ad49f15282a91aba68960c0cac77778e0cb7cea6ea8dac56b275ab40402763",
+      "tamanho": 52
+    },
+    {
+      "caminho": "requirements-build.lock.txt",
+      "sha256": "3bc9670b516a52fd4d8ec8ec09ce659010916c1db60a5409ac24f571a9f0f66f",
+      "tamanho": 93
+    },
+    {
+      "caminho": "requirements-build.txt",
+      "sha256": "492700d56c755f99b16ec03ab49d226c40de01fb57bae3031617dfbf009ca180",
+      "tamanho": 111
+    },
+    {
+      "caminho": "requirements.lock.txt",
+      "sha256": "e57fe18c39131d93b1af525953b44861f9c05807c6e306e3375810b0abe46b32",
+      "tamanho": 278
+    },
+    {
+      "caminho": "requirements.txt",
+      "sha256": "4b3b9a745a1d86d78a94dac21b7aef92c734ff2334cfb404a9607c4a3479fa36",
+      "tamanho": 164
+    },
+    {
+      "caminho": "scripts/Configurar-Estacao-Central.ps1",
+      "sha256": "8c942c785bff5742f16a2b6e97f8761faa88c0a7e791e87610e99cb640713f71",
+      "tamanho": 686
+    },
+    {
+      "caminho": "scripts/Configurar-Estacao-Cliente.ps1",
+      "sha256": "1e23d49425a0adfca0b1605ba0effadb1823120b4e39cb82f5e10efd05e5ecec",
+      "tamanho": 813
+    },
+    {
+      "caminho": "scripts/Desinstalar-Agente-TI.ps1",
+      "sha256": "dcdf87c69b54886831b2eecd68f4fed1b2a6f5967bd693b6951d40cd75c4471c",
+      "tamanho": 656
+    },
+    {
+      "caminho": "scripts/Desinstalar-Servidor-Corporativo.ps1",
+      "sha256": "5d2644e19e03a25feb7b32d191dc8db107ee206335634713eb83b0d67571eb22",
+      "tamanho": 570
+    },
+    {
+      "caminho": "scripts/Diagnosticar-Conexao-TI.ps1",
+      "sha256": "4ea02abcf2a480805a49cf4ed17c695dc94fe4da33e7645bf3603aa647bded3a",
+      "tamanho": 953
+    },
+    {
+      "caminho": "scripts/Instalar-Agente-TI.ps1",
+      "sha256": "9f6e7efee56f24fa7e97105ff3f83a01683dbfe9a14a099405f7c7eb8e424cd0",
+      "tamanho": 2636
+    },
+    {
+      "caminho": "scripts/Instalar-Servidor-Corporativo.ps1",
+      "sha256": "a0abe9dcac772357effe7139312d4d7ff2780649f35370cf29da31325021e702",
+      "tamanho": 1984
+    },
+    {
+      "caminho": "scripts/Preparar-Central-TI.ps1",
+      "sha256": "a6ce74534323a14109c49be5c7c5b5e554f8b377d2a2c20ee0a1b610bc480c95",
+      "tamanho": 2529
+    },
+    {
+      "caminho": "scripts/Remover-Regra-Servidor-TI.ps1",
+      "sha256": "d74b627bf82e19b2590d7be0ef6bfee23dcb0691df2f7099a0510469b1347404",
+      "tamanho": 434
+    },
+    {
+      "caminho": "scripts/Testar-Agente-TI.ps1",
+      "sha256": "23a7765e83a368c5afd595854e845d7a9a375ab9d436565cdbe6614ddfe63066",
+      "tamanho": 237
+    },
+    {
+      "caminho": "scripts/Testar-Central-TI.ps1",
+      "sha256": "e8c8709c47e1644ae8cdcf340735cfa1501e7a3f8a8d552eaf470dfb7446249e",
+      "tamanho": 629
+    },
+    {
+      "caminho": "scripts/Testar-Servidor-Corporativo.ps1",
+      "sha256": "dfad9f39b304f231653aac2bb5ad2e458d2a59a7944fed7926231bb96b0a8ae3",
+      "tamanho": 374
+    },
+    {
+      "caminho": "scripts/build_agente_ti.ps1",
+      "sha256": "c210257bf5d77d0683798e3d1a63e5708fe1931f5d73ec56494b76466cfb4bd8",
+      "tamanho": 1207
+    },
+    {
+      "caminho": "scripts/build_aplicacao.ps1",
+      "sha256": "1e1a135e5c890bc38d9af1f60c5173d4ae7a614721269a5ec8c0d19e8db9a10b",
+      "tamanho": 1109
+    },
+    {
+      "caminho": "scripts/build_distribuicao_windows.ps1",
+      "sha256": "975e43775f19ec67a7ebecdfe02cab4a2adcca14c57fc86c54fadd8d37293026",
+      "tamanho": 5950
+    },
+    {
+      "caminho": "scripts/build_servidor.ps1",
+      "sha256": "71dc93dab7828e14a1aa1e14d4b835bba5409a1d98835fb842e8ccfc1729466d",
+      "tamanho": 1112
+    },
+    {
+      "caminho": "scripts/empacotar_fonte_limpa.py",
+      "sha256": "4fb6c3ec3b550fd4571a0f80390889cb65666b708df113eda8d3e65f905f9d3f",
+      "tamanho": 8108
+    },
+    {
+      "caminho": "scripts/executar_grupo_testes.py",
+      "sha256": "07e46e7de5dded65a93f1d6cbc79342a7ee734e4cf00804e458892e4856fd511",
+      "tamanho": 1678
+    },
+    {
+      "caminho": "scripts/gerar_capturas_interface.py",
+      "sha256": "3e7773fde9c23dc4ceead9b2a68d1bab40e1c92948ed10dc1772fd1b200772cf",
+      "tamanho": 15333
+    },
+    {
+      "caminho": "scripts/verificar_fonte_reproduzivel.py",
+      "sha256": "37f599138bf4e7c9b458042dcf4d05da3309c4160778a14771f429a945d1d442",
+      "tamanho": 3741
+    },
+    {
+      "caminho": "scripts/verificar_pacote_limpo.py",
+      "sha256": "939ea5ddb829115ed11ae6585e0f6607e9650a14d9fc40324323ab6da92edd8a",
+      "tamanho": 1110
+    },
+    {
+      "caminho": "scripts/verificar_python_release.py",
+      "sha256": "3f6cf72a39e73fa32f0a394acbc8237cc1ba002b65c6180f2d2e4af894b8b65f",
+      "tamanho": 770
+    },
+    {
+      "caminho": "servidor/__init__.py",
+      "sha256": "05e2816e15678c9164c492da037f8736040fe56a65cbab258d78e1fe0e092a14",
+      "tamanho": 242
+    },
+    {
+      "caminho": "servidor/__main__.py",
+      "sha256": "0e4ad51d272729410f6b4ab07acb17911d15a68b17ecb0811e1b83ecb4d0c8c6",
+      "tamanho": 820
+    },
+    {
+      "caminho": "servidor/api.py",
+      "sha256": "180bc302365c8ef3f1761d83c303d19a1bb687c18996dad8202e43dbfa81bde8",
+      "tamanho": 4975
+    },
+    {
+      "caminho": "servidor/seguranca.py",
+      "sha256": "c163c7f776949e20fff4369a181d703770ad734471fe63c40a5cfca3951546d1",
+      "tamanho": 1744
+    },
+    {
+      "caminho": "servidor_corporativo/__init__.py",
+      "sha256": "af2b29596109a8558db8a14e1c76918d0fd51d484219c389c0875d589c8ba7b3",
+      "tamanho": 84
+    },
+    {
+      "caminho": "servidor_corporativo/__main__.py",
+      "sha256": "96e215598dbc2a9faaa68d421a151dfca04e5b968fd3a99ebf369634d3b336a5",
+      "tamanho": 2619
+    },
+    {
+      "caminho": "servidor_corporativo/app.py",
+      "sha256": "deaa91d4d840fe0c12f0eed9e1d3c38abea509a113dd4156ebcf03bb61065fe9",
+      "tamanho": 27259
+    },
+    {
+      "caminho": "servidor_corporativo/config.py",
+      "sha256": "8e8ab62dcbb82fba65b00ca4d32d0ec5ff553641086913bb77ee93fd675fee1c",
+      "tamanho": 3567
+    },
+    {
+      "caminho": "servidor_corporativo/rpc.py",
+      "sha256": "b639aa76c9a2d3df41a2103b26876e64ffd84313038377a0501986b69f116867",
+      "tamanho": 1636
+    },
+    {
+      "caminho": "servidor_corporativo/sessoes.py",
+      "sha256": "0866270017b7a259611debe0dba1a9d9f5b6cfd16af9adf35d3ce2d7e32243a6",
+      "tamanho": 3886
+    },
+    {
+      "caminho": "servidor_ti/__init__.py",
+      "sha256": "e60e96101108cb9cc4606733cbaf8907adddb5341d8b1417c613e894cb48134e",
+      "tamanho": 305
+    },
+    {
+      "caminho": "servidor_ti/app.py",
+      "sha256": "f4fab2120268bf4735c9cb94abbc57247adb6049da69a0a854b5683d6b75c707",
+      "tamanho": 5866
+    },
+    {
+      "caminho": "servidor_ti/config.py",
+      "sha256": "0e7d90b093d530b96a9366618f3a3f796c60819f3dc2724e771060b21b8981ea",
+      "tamanho": 3066
+    },
+    {
+      "caminho": "servidor_ti/runtime.py",
+      "sha256": "67e612340cd217a4ae027a0dee00f05d1cede7eb361fc9b4304463be71fd071f",
+      "tamanho": 3916
+    },
+    {
+      "caminho": "servidor_ti/security.py",
+      "sha256": "37a0d0d1af3d3daa5561af0b8dd453fac5d033d0b3dd8fdc2977fa9b4639420b",
+      "tamanho": 3785
+    },
+    {
+      "caminho": "sistema/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "sistema/idbrowser.py",
+      "sha256": "cc4f6e1fc85dd331e30423475f28ddc4232f4b4879666681d8cbe814ad7f6ce7",
+      "tamanho": 2629
+    },
+    {
+      "caminho": "sistema/iduser.py",
+      "sha256": "bfffef963f51fa242ee3614b83495e15868d8c7ddeb94832224c54426db0bfc4",
+      "tamanho": 407
+    },
+    {
+      "caminho": "sistema/opsystemcheck.py",
+      "sha256": "fc2df05ebe7b7815e460ab62842bf44909a771fdc7d1087b4e15395869d3bf07",
+      "tamanho": 265
+    },
+    {
+      "caminho": "tests/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "tamanho": 1
+    },
+    {
+      "caminho": "tests/test_agente_ti.py",
+      "sha256": "50f3b37fc4c4a06db2be95d62e7717091a43af7b9280880c73f105be7b37e5b0",
+      "tamanho": 7967
+    },
+    {
+      "caminho": "tests/test_auditoria_regressoes.py",
+      "sha256": "846111c5ac34e130c3aa0df20f7cfa011d960615fe19cc4a7622be786e92d948",
+      "tamanho": 9189
+    },
+    {
+      "caminho": "tests/test_auth.py",
+      "sha256": "8eb3c400449e988c298f73431e4e855c9f2096b6ceac8a4f87fbf5e64ee51b71",
+      "tamanho": 2878
+    },
+    {
+      "caminho": "tests/test_captura_visual.py",
+      "sha256": "832528794d5fe4991310a4422725c9879bd07294a46305b48dfd6de99778f670",
+      "tamanho": 4456
+    },
+    {
+      "caminho": "tests/test_compras_2_0.py",
+      "sha256": "34eafcf159ea7cd1fd2eefe721ac1ec10c3c4f22ab816e739659deb5a60e4c08",
+      "tamanho": 15353
+    },
+    {
+      "caminho": "tests/test_data_engine.py",
+      "sha256": "ff215fde21c4210360c42348a61c406d5b4f9189cbcf910b14b99384081f25a8",
+      "tamanho": 6515
+    },
+    {
+      "caminho": "tests/test_enterprise_v5.py",
+      "sha256": "103082774bb7af9e47efb240dc6a31239ff3542e8ba98abd302bff392de871e7",
+      "tamanho": 8082
+    },
+    {
+      "caminho": "tests/test_estabilizacao_v5_1.py",
+      "sha256": "a0ac6c3d9285402b23cf41105bdb195123d141dce0c1532559122e8e64d5e54d",
+      "tamanho": 8201
+    },
+    {
+      "caminho": "tests/test_estabilizacao_v6.py",
+      "sha256": "4f9bff93e0cdca97e8da7ee8463297bde53491a6ebd16351d15f35c53637264c",
+      "tamanho": 7732
+    },
+    {
+      "caminho": "tests/test_estoque_2_0.py",
+      "sha256": "924c5238a802368115396ac748009d557beba21a85604550d661e23c08f6f45b",
+      "tamanho": 10371
+    },
+    {
+      "caminho": "tests/test_financeiro_departamental.py",
+      "sha256": "a934ba4d45b9a51fbf2875f071342c69bc930540883c7bb190b3c632c3bd261c",
+      "tamanho": 10058
+    },
+    {
+      "caminho": "tests/test_historico_preferencias.py",
+      "sha256": "cc4d9b0b4fce905218a7765b46559725d32e4584cecaca5a1a415bee915824d0",
+      "tamanho": 3561
+    },
+    {
+      "caminho": "tests/test_indicadores_v4.py",
+      "sha256": "149aba23ab9560f3ca73728d3e8e9b1472d0e2a672563e6c528211ee0319d8dd",
+      "tamanho": 4766
+    },
+    {
+      "caminho": "tests/test_interface_screenshots.py",
+      "sha256": "bf7b7a7d459c39f6648db1261a39861f3db4f733386b2a9bfe8f26f051f1000c",
+      "tamanho": 1692
+    },
+    {
+      "caminho": "tests/test_interface_smoke_v8_2.py",
+      "sha256": "6676c35c9c31c0e8a8f9fa6d884b5a38f7e395df78076ef2e4181a4e4f9e82c8",
+      "tamanho": 18219
+    },
+    {
+      "caminho": "tests/test_interface_v7.py",
+      "sha256": "f9609db0f98d4f81eb871b0f0f6fa989730644579cd9228b34aaa324c91c4ed9",
+      "tamanho": 3500
+    },
+    {
+      "caminho": "tests/test_rh_2_0.py",
+      "sha256": "df4f8d8cca29a2aa39a8615091d0028407bf9fb6f463d84b7fb9545aecc8d5e0",
+      "tamanho": 11173
+    },
+    {
+      "caminho": "tests/test_servidor_ti.py",
+      "sha256": "4285a0938b4a79009649bed667fa1df107d930d9399a7fb3143921d3d415a2a5",
+      "tamanho": 5138
+    },
+    {
+      "caminho": "tests/test_tecnologia_2_0.py",
+      "sha256": "9b5f8bed974e67097ebaae47386abaaa55c25b77b70378e6d9a46879faaa7f2e",
+      "tamanho": 12262
+    },
+    {
+      "caminho": "tests/test_tecnologia_3_0.py",
+      "sha256": "2b5155d09eef0426ed79d5d951286c42a982965c63fb90f38a73d066edc62b81",
+      "tamanho": 13008
+    },
+    {
+      "caminho": "tests/test_tratamento_qualidade.py",
+      "sha256": "52512469073386dd3b692acf526c884309f9ae20c4bd8c1e33b1a46c672c7820",
+      "tamanho": 3554
+    },
+    {
+      "caminho": "tests/test_v8_1_estabilizacao.py",
+      "sha256": "a327a5ad421d51a4f8d159b12ff4d4ab41c73dc08a5304023b53296ffb454812",
+      "tamanho": 6152
+    },
+    {
+      "caminho": "tests/test_v8_2_1_hotfix.py",
+      "sha256": "8dfba18771c2bb4c55f8a711563ad737f08da0b2db29d96dd8a9d848dd419903",
+      "tamanho": 4578
+    },
+    {
+      "caminho": "tests/test_v8_2_correcoes.py",
+      "sha256": "fb953917417f178f4809b4d93ad1df45d08c12ff758e736136b7b82f057205bf",
+      "tamanho": 9509
+    },
+    {
+      "caminho": "tests/test_v8_backend.py",
+      "sha256": "b9326e0e08cd55de77f66df07b5e81b37c4a3aad1cbf1101ea18b605049263e9",
+      "tamanho": 9811
+    },
+    {
+      "caminho": "tests/test_v9_1_autoridade_central.py",
+      "sha256": "677e532d7c2d65766ecfa536621efbb8b91ac53522bbd21196c8e8f932283f76",
+      "tamanho": 8459
+    },
+    {
+      "caminho": "tests/test_v9_3_release_engineering.py",
+      "sha256": "8074330a415c8b1e877eb9678051967bf9957b417ed3e291f5fcda9727a2b6ec",
+      "tamanho": 2965
+    },
+    {
+      "caminho": "tests/test_v9_integrada.py",
+      "sha256": "2f620248c4f76f37117b4e805d0b1d423a4458381c7410c74a82a3a1b5ea551a",
+      "tamanho": 6201
+    },
+    {
+      "caminho": "tests/test_v9_interface_smoke.py",
+      "sha256": "706947c5804a72060e7905f40947f6ed09242534b836c94442be25db3a8767db",
+      "tamanho": 4177
+    },
+    {
+      "caminho": "tests/test_vnext_estabilizacao.py",
+      "sha256": "a730374f23dab564e2910ab06052ec773a5ee72ea4760559c23c31a8d9ba03a3",
+      "tamanho": 13835
+    }
+  ],
+  "formato": 1,
+  "produto": "Data Intelligence Enterprise Platform",
+  "python_release": "3.14",
+  "versao": "9.3.0"
+}

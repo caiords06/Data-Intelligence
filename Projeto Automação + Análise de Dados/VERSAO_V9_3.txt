@@ -1,0 +1,8 @@
+Data Intelligence Enterprise Platform V9.3
+Release Engineering + Zero Defects
+- registry de migrations sem colisões e validado antes do release
+- pacote-fonte canônico por allowlist, determinístico e com manifesto SHA-256
+- três arquivos PyInstaller .spec obrigatórios e preservados no source package
+- Python de release fixado em 3.14
+- dependências diretas e ferramentas de build travadas para release
+- CI em grupos isolados + validação do ZIP extraído + build PyInstaller no Windows

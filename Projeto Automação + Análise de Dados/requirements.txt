@@ -1,0 +1,9 @@
+# Dependências diretas da aplicação
+pandas>=2.2,<4
+openpyxl>=3.1,<4
+xlrd>=2.0,<3
+selenium>=4.20,<5
+Pillow>=11.0,<13
+pyarrow>=18
+reportlab>=4.2,<5
+psutil>=7.0,<8

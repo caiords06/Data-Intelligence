@@ -1,0 +1,47 @@
+DATA INTELLIGENCE · TI CENTRAL + AGENTE 1.1
+VALIDAÇÃO TÉCNICA
+
+Python compileall: OK
+Python tabnanny: OK
+
+Testes executados por grupos:
+- Grupo A: 51 passed, 19 subtests passed
+- Grupo B: 43 passed
+- Grupo C: 12 passed, 1 skipped, 11 subtests passed
+- Grupo D (Agente/Servidor/Tecnologia/hotfixes): 43 passed
+- Tk smoke real com Xvfb: 9 passed, 52 subtests passed
+
+Consolidado:
+- 158 testes aprovados
+- 1 teste ignorado
+- 82 subtests aprovados
+
+API agente:
+- GET health: implementado
+- POST heartbeat: implementado
+- HMAC SHA-256: OK
+- timestamp: OK
+- nonce/replay protection: OK
+- token incorreto recusado: OK
+- heartbeat real localhost: HTTP 202
+- ativo atualizado: OK
+- telemetria gravada: OK
+- metadados AnyDesk ingeridos: OK
+
+Banco após migração 013:
+- PRAGMA integrity_check: ok
+- PRAGMA foreign_key_check: 0 violações
+- ti_agentes: presente
+- ti_agente_nonces: presente
+
+Empacotamento:
+- DataIntelligencePlatform.spec: presente
+- agente_ti.spec: presente
+- script build Windows completo: presente
+- scripts Central: presentes
+- scripts Agente: presentes
+- READMEs Central/Agente/Distribuição: presentes
+
+OBSERVAÇÃO:
+O ambiente de validação é Linux. O executável Windows final deve ser gerado
+no Windows usando scripts\build_distribuicao_windows.ps1.
