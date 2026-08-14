@@ -5,8 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 
 from auth.sessao import SESSAO
-from enterprise.catalogo import MODULOS, ORDEM_MODULOS
-from enterprise.contexto import listar_modulos_permitidos
+from services.catalogo import MODULOS, ORDEM_MODULOS
+from services.contexto import listar_modulos_permitidos
 from interface.componentes import (
     AreaRolavel,
     GradeResponsiva,
@@ -16,6 +16,7 @@ from interface.componentes import (
     criar_chip,
     criar_sidebar,
 )
+from interface.icones import icone
 from interface.tema import CORES, FONTES, LAYOUT
 
 
@@ -78,7 +79,7 @@ class TelaCatalogoModulos:
             topo.grid(row=0, column=0, sticky="ew", padx=17, pady=(14, 8))
             tk.Label(
                 topo,
-                text=modulo["icone"],
+                text=icone(chave, modulo["icone"]),
                 font=("Segoe UI Symbol", 17, "bold"),
                 fg=modulo["cor"],
                 bg=CORES["primary_soft"],
@@ -102,7 +103,7 @@ class TelaCatalogoModulos:
             tk.Label(
                 card,
                 text=modulo["nome"],
-                font=("Segoe UI", 10, "bold"),
+                font=("Inter", 10, "bold"),
                 fg=CORES["text"],
                 bg=CORES["card"],
             ).grid(row=1, column=0, sticky="w", padx=17)

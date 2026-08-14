@@ -163,7 +163,9 @@ class AutoridadeCentralV91Tests(unittest.TestCase):
         self.assertEqual(faltantes, [])
 
     def test_interface_nao_possui_sql_direto_de_estoque(self):
-        texto = (Path(__file__).parents[1] / "interface" / "estoque.py").read_text(encoding="utf-8")
+        raiz = Path(__file__).parents[1] / "interface"
+        arquivos = [raiz / "estoque.py", raiz / "estoque_shared.py", raiz / "estoque_views.py", raiz / "estoque_acoes.py"]
+        texto = "\n".join(x.read_text(encoding="utf-8") for x in arquivos if x.is_file())
         self.assertNotIn("from auth.banco import conectar", texto)
         self.assertIn("obter_primeiro_item_operacao", texto)
 

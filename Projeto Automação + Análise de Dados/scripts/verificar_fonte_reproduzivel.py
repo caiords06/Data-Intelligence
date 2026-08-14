@@ -1,9 +1,8 @@
-"""Valida o pacote-fonte V9.3 a partir de uma extração limpa.
+"""Valida o pacote-fonte V11 a partir de uma extração limpa.
 
 A validação estrutural compila o código e analisa os três .spec. Para testes,
-use ``--grupo 1``, ``--grupo 2`` ou ``--grupo 3``. Cada invocação usa uma
-extração própria; o CI executa os grupos em jobs independentes para isolamento
-real de sockets, SQLite e estado temporário.
+use ``--grupo 1`` a ``--grupo 6``. Cada invocação usa uma
+extração própria e o runner V11 executa cada arquivo pytest em processo separado.
 """
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ def _extrair(caminho_zip: Path, destino: Path) -> None:
         zf.extractall(destino)
 
 
-def _selecionar_testes(raiz: Path, grupo: int, total: int = 3) -> list[str]:
+def _selecionar_testes(raiz: Path, grupo: int, total: int = 6) -> list[str]:
     arquivos = sorted((raiz / "tests").glob("test_*.py"))
     tamanho = math.ceil(len(arquivos) / total)
     inicio = (grupo - 1) * tamanho
@@ -43,10 +42,10 @@ def _selecionar_testes(raiz: Path, grupo: int, total: int = 3) -> list[str]:
 def validar(caminho_zip: Path, grupo_testes: int | None = None) -> None:
     caminho_zip = caminho_zip.resolve()
     validar_zip(caminho_zip)
-    if grupo_testes is not None and grupo_testes not in (1, 2, 3):
-        raise ValueError("Grupo deve ser 1, 2 ou 3.")
+    if grupo_testes is not None and grupo_testes not in range(1, 7):
+        raise ValueError("Grupo deve estar entre 1 e 6.")
 
-    with tempfile.TemporaryDirectory(prefix="di-v93-source-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="di-v11-source-") as tmp:
         raiz = Path(tmp) / "fonte"
         _extrair(caminho_zip, raiz)
 
@@ -65,35 +64,34 @@ def validar(caminho_zip: Path, grupo_testes: int | None = None) -> None:
             raise RuntimeError("Falha ao compilar o código Python do pacote extraído.")
 
         if grupo_testes is not None:
-            relativos = _selecionar_testes(raiz, grupo_testes)
             ambiente = os.environ.copy()
-            ambiente.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+            ambiente["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
             proc = subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", *relativos],
+                [sys.executable, "scripts/executar_grupo_testes.py", "--grupo", str(grupo_testes), "--total", "6"],
                 cwd=raiz,
                 env=ambiente,
                 check=False,
-                timeout=150,
+                timeout=240,
             )
             if proc.returncode:
-                raise RuntimeError(f"Grupo de testes {grupo_testes}/3 falhou no pacote extraído.")
+                raise RuntimeError(f"Grupo de testes {grupo_testes}/6 falhou no pacote extraído.")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("zip", nargs="?", help="ZIP a validar; se omitido, gera um temporário.")
-    parser.add_argument("--grupo", type=int, choices=(1, 2, 3), help="Executa um grupo isolado de testes no ZIP extraído.")
+    parser.add_argument("--grupo", type=int, choices=range(1, 7), help="Executa um grupo isolado de testes no ZIP extraído.")
     args = parser.parse_args()
 
     if args.zip:
         caminho = Path(args.zip).expanduser().resolve()
         validar(caminho, grupo_testes=args.grupo)
     else:
-        with tempfile.TemporaryDirectory(prefix="di-v93-package-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="di-v11-package-") as tmp:
             caminho, _ = empacotar(Path(tmp) / "source.zip")
             validar(caminho, grupo_testes=args.grupo)
-    sufixo = f" + grupo {args.grupo}/3" if args.grupo else ""
-    print(f"Pacote-fonte V9.3 validado a partir de extração limpa{sufixo}.")
+    sufixo = f" + grupo {args.grupo}/6" if args.grupo else ""
+    print(f"Pacote-fonte V11 validado a partir de extração limpa{sufixo}.")
     return 0
 
 

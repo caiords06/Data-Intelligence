@@ -1,3 +1,4 @@
+# LEGADO/STANDALONE: porta 8765 pertence ao receptor TI embutido. Em V10.2.0 Server First use o Servidor Corporativo :8770.
 param(
     [int]$Porta = 8765
 )

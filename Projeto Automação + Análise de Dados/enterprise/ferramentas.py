@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import logging
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -217,7 +218,7 @@ def registrar_documento(
         from enterprise.servidor_cliente import espelhar_exportacao
         espelhar_exportacao(destino, modulo=modulo, categoria="documento")
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Não foi possível espelhar documento corporativo no servidor")
     return documento_id
 
 

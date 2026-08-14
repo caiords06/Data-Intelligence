@@ -1,4 +1,4 @@
-# Dependências diretas travadas para o release V9.3 / Python 3.14.
+# Dependências diretas travadas para o release V11.1.0 / Python 3.14.
 # Atualizações devem ser feitas conscientemente, acompanhadas da suíte de regressão.
 pandas==3.0.5
 openpyxl==3.1.5
@@ -8,3 +8,8 @@ Pillow==12.3.0
 pyarrow==25.0.1
 reportlab==4.4.9
 psutil==7.2.2
+cryptography==50.0.0
+
+psycopg==3.3.4
+psycopg-binary==3.3.4
+psycopg-pool==3.3.1

@@ -1,0 +1,6 @@
+V10.4.0 — Analytics como Inteligência Empresarial
+- Visão executiva integrada aos nove módulos especializados.
+- Insights explicáveis, persistentes, priorizados e acionáveis.
+- Alertas e regras analíticas customizáveis.
+- Laboratório de arquivos mantido como área secundária.
+- Placeholders de IA/MLOps removidos da navegação produtiva.

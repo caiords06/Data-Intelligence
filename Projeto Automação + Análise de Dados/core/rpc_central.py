@@ -1,7 +1,7 @@
 """RPC restrito para tornar o Servidor Corporativo a autoridade transacional.
 
 Esta camada não expõe SQL. Somente funções explicitamente permitidas podem ser
-chamadas remotamente. Em nós ``central``/``cliente``, as funções de domínio
+chamadas remotamente. Em nós ``central``/``cliente``, as funções autorizadas
 listadas abaixo são substituídas por proxies HTTP. No processo ``servidor`` e
 no modo ``standalone`` continuam executando localmente.
 """
@@ -13,6 +13,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 import base64
+import logging
 import sqlite3
 
 try:
@@ -20,23 +21,73 @@ try:
 except Exception:  # pragma: no cover - servidor mínimo sem pandas
     pd = None
 
-# Operações de arquivo local e aquisição de rede ficam fora do RPC genérico.
-# Elas precisam de upload/download ou execução na estação e nunca devem cair
-# silenciosamente no banco-cache local.
+# Operações que transportam arquivos ficam fora do RPC JSON genérico.
+# Em estações remotas elas são roteadas pelo wrapper para o canal dedicado
+# de upload/download de core.rpc_arquivos; nunca caem em persistência local.
 RPC_BLOQUEADAS_REMOTO: dict[str, set[str]] = {
     "enterprise.rh": {"registrar_documento", "gerar_contracheque", "gerar_relatorio_rh"},
     "enterprise.financeiro": {"anexar_documento", "importar_extrato", "gerar_relatorio_financeiro"},
     "enterprise.compras": {"registrar_documento_fornecedor", "gerar_pdf_pedido", "gerar_relatorio_compras"},
     "enterprise.estoque": {"gerar_relatorio_estoque"},
     "enterprise.tecnologia": {"gerar_relatorio_tecnologia"},
-    "enterprise.ferramentas": {"registrar_documento", "verificar_documento", "gerar_relatorio", "obter_arquivo_relatorio"},
+    "enterprise.ferramentas": {"registrar_documento", "gerar_relatorio", "obter_arquivo_relatorio"},
     "enterprise.datasets": {"importar_conjunto", "substituir_arquivo_conjunto"},
+    "enterprise.core_v11.documentos": {"registrar_midia", "registrar_documento", "adicionar_versao_documento"},
+    "enterprise.core_v11.funcionarios": {"registrar_avatar"},
 }
 
 RPC_ALLOWLIST: dict[str, set[str]] = {
+    "enterprise.analytics_inteligencia": {
+        "obter_painel_executivo", "gerar_insights", "listar_insights", "contar_insights", "alterar_status_insight",
+        "listar_regras", "salvar_regra", "definir_regra_ativa", "historico_execucoes",
+    },
+    "enterprise.orquestracao": {
+        "converter_lead_em_oportunidade", "criar_fluxo_admissao", "criar_fluxo_desligamento",
+        "encaminhar_provisao_financeiro", "criar_fluxo_reposicao", "listar_orquestracoes", "contar_orquestracoes",
+        "listar_etapas_orquestracao", "concluir_etapa", "resumo_orquestracoes",
+    },
+    "enterprise.crm": {
+        "criar_empresa_crm","listar_empresas_crm","criar_contato","listar_contatos",
+        "criar_lead","listar_leads","contar_leads","atualizar_lead_status","registrar_atividade","resumo_crm",
+    },
+    "enterprise.marketing": {
+        "criar_canal","listar_canais","criar_campanha","listar_campanhas","contar_campanhas","atualizar_status_campanha",
+        "criar_conteudo","listar_conteudos","criar_automacao","listar_automacoes","registrar_metricas",
+        "resumo_marketing","exportar_dataframe_marketing","analisar_marketing",
+    },
+    "enterprise.comercial": {
+        "garantir_etapas_padrao","listar_etapas","criar_oportunidade","listar_oportunidades","contar_oportunidades","mover_oportunidade",
+        "registrar_atividade","criar_proposta","listar_propostas","salvar_meta","resumo_comercial",
+        "analisar_comercial","exportar_dataframe_comercial",
+    },
+    "enterprise.administrativo": {
+        "criar_solicitacao","listar_solicitacoes","contar_solicitacoes","atualizar_status_solicitacao","criar_recurso","listar_recursos",
+        "criar_reserva","listar_reservas","criar_viagem","listar_viagens","criar_reembolso","listar_reembolsos",
+        "criar_manutencao","listar_manutencoes","resumo_administrativo","analisar_administrativo",
+        "exportar_dataframe_administrativo",
+    },
+    "enterprise.juridico": {
+        "criar_contrato","listar_contratos","criar_processo","listar_processos","contar_processos","criar_prazo","listar_prazos",
+        "concluir_prazo","criar_audiencia","listar_audiencias","registrar_risco","listar_riscos","criar_provisao",
+        "listar_provisoes","resumo_juridico","analisar_juridico","exportar_dataframe_juridico",
+    },
+    "configuracoes.preferencias": {"carregar_preferencias", "salvar_preferencias", "obter_preferencia"},
+    "historico.repositorio": {
+        "registrar_analise", "listar_historico", "obter_analise",
+        "excluir_analise", "excluir_analises",
+    },
+    "enterprise.contexto": {
+        "obter_permissoes_usuario", "salvar_permissoes_usuario",
+        "aplicar_perfil_padrao_usuario",
+    },
+    "enterprise.organizacao": {
+        "listar_empresas", "listar_filiais", "listar_departamentos", "listar_centros_custo",
+        "criar_empresa", "criar_filial", "criar_departamento", "criar_centro_custo",
+    },
+    "enterprise.nos_plataforma": {"cadastrar_no", "listar_nos", "alterar_status_no"},
     "enterprise.rh": {
         "tem_permissao_rh","exigir_acao","salvar_permissao_acao","listar_catalogos","criar_colaborador",
-        "listar_colaboradores","obter_colaborador","atualizar_colaborador","adicionar_dependente","iniciar_admissao",
+        "listar_colaboradores","obter_colaborador","atualizar_colaborador","alterar_estado_registro_rh","adicionar_dependente","iniciar_admissao",
         "listar_admissoes","atualizar_admissao","iniciar_desligamento","concluir_desligamento","solicitar_ferias_ausencia",
         "decidir_ferias_ausencia","salvar_beneficio","vincular_beneficio","abrir_folha","adicionar_evento_folha",
         "fechar_folha","vincular_equipamento","devolver_equipamento","registrar_ponto","salvar_cargo","criar_vaga",
@@ -103,18 +154,61 @@ RPC_ALLOWLIST: dict[str, set[str]] = {
     },
     "enterprise.ferramentas": {
         "criar_tarefa","listar_tarefas","atualizar_status_tarefa","arquivar_tarefa","listar_documentos",
-        "listar_relatorios","listar_auditoria","registrar_uso_ferramenta",
+        "arquivar_documento","listar_relatorios","listar_auditoria","registrar_uso_ferramenta","verificar_documento",
     },
     "enterprise.recursos": {
         "criar_recurso","listar_recursos","obter_recurso","atualizar_recurso","alterar_estado_recurso","resumo_recursos",
     },
     "enterprise.workflows": {"criar_workflow","listar_workflows","definir_workflow_ativo","executar_workflows"},
     "enterprise.integracoes": {"registrar_integracao","listar_integracoes","definir_integracao_ativa"},
+    "enterprise.compliance": {
+        "abrir_incidente_privacidade", "atualizar_solicitacao_titular", "avaliar_incidente_privacidade",
+        "criar_solicitacao_titular", "definir_bloqueio_retencao", "encerrar_bloqueio_retencao",
+        "listar_bloqueios_retencao", "listar_incidentes_privacidade", "listar_solicitacoes_titulares",
+        "listar_decisoes_analiticas", "listar_ripd", "listar_terceiros", "listar_tratamentos",
+        "resumo_conformidade", "salvar_decisao_analitica", "salvar_ripd", "salvar_terceiro", "salvar_tratamento",
+    },
+    "enterprise.remote_governanca": {
+        "emitir_autorizacao_remota", "encerrar_autorizacao_remota", "listar_autorizacoes_remotas",
+        "obter_politica_remota", "salvar_politica_remota",
+    },
     "enterprise.jobs": {
         "criar_job","iniciar_job","atualizar_job","concluir_job","falhar_job","solicitar_cancelamento",
         "cancelamento_solicitado","cancelar_job","listar_jobs",
     },
     "enterprise.datasets": {"listar_conjuntos","obter_conjunto","excluir_conjunto","atualizar_metadados_conjunto"},
+    "enterprise.core_v11.pessoas": {"criar_pessoa", "vincular_papel", "listar_pessoas", "obter_pessoa", "sincronizar_colaborador"},
+    "enterprise.core_v11.organizacao": {"criar_unidade", "listar_unidades", "arvore_organizacional", "atualizar_unidade"},
+    "enterprise.core_v11.seguranca": {
+        "criar_grupo", "adicionar_membro", "criar_funcao_contextual", "atribuir_funcao",
+        "tem_permissao_contextual", "exigir_permissao_contextual", "listar_grupos_funcoes",
+    },
+    "enterprise.core_v11.colaboracao": {
+        "adicionar_comentario", "listar_comentarios", "notificar", "criar_evento_calendario",
+        "listar_calendario", "caixa_entrada", "salvar_dashboard", "listar_dashboards",
+        "salvar_preferencia_contextual",
+    },
+    "enterprise.core_v11.metadados": {
+        "definir_campo", "listar_campos", "salvar_campos_valores", "obter_campos_valores",
+        "criar_etiqueta", "aplicar_etiqueta", "salvar_configuracao",
+    },
+    "enterprise.core_v11.documentos": {
+        "registrar_midia_bytes", "obter_midia", "carregar_midia_bytes", "listar_documentos",
+        "solicitar_assinatura", "registrar_evidencia_assinatura", "registrar_resultado_ocr",
+    },
+    "enterprise.core_v11.busca": {"busca_universal", "reindexar_core"},
+    "enterprise.core_v11.registros": {
+        "listar_tipos", "salvar_tipo", "criar_registro", "listar_registros", "obter_registro",
+        "alterar_estado_registro", "atualizar_registro", "avancar_fluxo", "relacionar_registros", "resumo_operacional",
+    },
+    "enterprise.core_v11.funcionarios": {
+        "garantir_vinculo", "obter_funcionario_360", "obter_meu_funcionario_360", "registrar_avatar_bytes",
+        "carregar_avatar", "registrar_acesso", "registrar_feedback", "registrar_custo", "registrar_ocorrencia",
+    },
+    "enterprise.core_v11.transferencias": {
+        "exportar_registros", "importar_registros_bytes", "listar_transferencias", "baixar_exportacao",
+    },
+    "enterprise.core_v11.integracoes": {"registrar_referencia_credencial", "listar_credenciais", "registrar_rotacao"},
 }
 
 
@@ -147,7 +241,7 @@ def serializar(valor: Any) -> Any:
         try:
             return serializar(item())
         except Exception:
-            pass
+            logging.getLogger(__name__).debug("Conversão de escalar RPC por item() falhou", exc_info=True)
     raise TypeError(f"Tipo não suportado pelo RPC corporativo: {type(valor).__name__}")
 
 
@@ -188,11 +282,8 @@ def instalar_proxy_modulo(namespace: dict[str, Any], nome_modulo: str) -> None:
             if not usa_servidor_remoto():
                 return __original(*args, **kwargs)
             if __nome in RPC_BLOQUEADAS_REMOTO.get(nome_modulo, set()):
-                raise ValueError(
-                    f"A operação {nome_modulo}.{__nome} usa arquivo/rede local e precisa do fluxo "
-                    "específico de upload/execução da estação. Ela foi bloqueada para impedir gravação "
-                    "acidental no banco-cache local."
-                )
+                from enterprise.servidor_cliente import executar_operacao_arquivo_remota
+                return executar_operacao_arquivo_remota(nome_modulo, __nome, args, kwargs)
             from enterprise.servidor_cliente import executar_rpc_remoto
             return executar_rpc_remoto(nome_modulo, __nome, args, kwargs)
 

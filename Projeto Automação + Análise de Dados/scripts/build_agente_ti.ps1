@@ -7,7 +7,7 @@ Set-Location $ProjectRoot
 
 Write-Host "[1/4] Validando Python de release..."
 python scripts\verificar_python_release.py
-Assert-NativeSuccess "Python incompatível com o release V9.3."
+Assert-NativeSuccess "Python incompatível com o release V10."
 
 Write-Host "[2/4] Instalando dependências travadas do agente..."
 python -m pip install -r requirements-agent.lock.txt

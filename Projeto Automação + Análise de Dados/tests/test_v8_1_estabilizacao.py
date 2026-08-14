@@ -114,12 +114,16 @@ class EstabilizacaoV81Tests(unittest.TestCase):
         faltantes = []
         for modulo, configuracao in PAINEIS_MODULOS.items():
             for secao, _icone, _titulo in configuracao["menu"]:
+                # Marketing V10.3 possui formulários/domínio próprios e não usa
+                # mais ESQUEMAS_RECURSOS genéricos.
+                if modulo == "marketing":
+                    continue
                 if secao not in {"visao", "registros"} and secao not in ESQUEMAS_RECURSOS:
                     faltantes.append((modulo, secao))
         self.assertEqual(faltantes, [])
 
     def test_toda_secao_analytics_tem_esquema_ou_fluxo_proprio(self):
-        fluxos_proprios = {"visao", "nova", "importacoes", "conjuntos", "perfis"}
+        fluxos_proprios = {"visao", "insights", "alertas", "regras", "nova", "importacoes", "conjuntos"}
         faltantes = [
             chave
             for chave, _icone, _titulo in MENU_ANALYTICS

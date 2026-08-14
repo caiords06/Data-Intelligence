@@ -104,11 +104,14 @@ class HotfixV821Tests(unittest.TestCase):
 
     def test_rotulos_analytics_sao_canonicos(self):
         menu = {chave: titulo for chave, _icone, titulo in MENU_ANALYTICS}
-        self.assertEqual(menu["visao"], "Dashboard analítico")
+        self.assertEqual(menu["visao"], "Visão executiva")
+        self.assertEqual(menu["insights"], "Insights")
         self.assertEqual(menu["conjuntos"], "Explorar dados")
         self.assertEqual(menu["relatorios"], "Relatórios")
         self.assertEqual(menu["visualizacoes"], "Visualizações")
-        self.assertEqual(menu["modelos"], "Modelos")
+        self.assertEqual(menu["regras"], "Regras analíticas")
+        self.assertNotIn("modelos", menu)
+        self.assertNotIn("assistente", menu)
 
 
 if __name__ == "__main__":

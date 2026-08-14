@@ -24,201 +24,28 @@ from uuid import uuid4
 
 import pandas as pd
 
-from auth.banco import conectar
+from enterprise.repositories import conectar
 from enterprise.contexto import exigir_permissao, obter_escopo_ator, tem_permissao
 
-
-ACOES_TECNOLOGIA = {
-    "consultar", "consultar_meus_chamados", "abrir_chamado", "atender_chamado", "resolver_chamado",
-    "gerenciar_ativos", "registrar_telemetria", "gerenciar_manutencao",
-    "gerenciar_rede", "autorizar_descoberta", "registrar_descoberta",
-    "gerenciar_licencas", "gerenciar_sistemas", "gerenciar_monitoramento",
-    "gerenciar_conhecimento", "gerenciar_contratos", "gerenciar_problemas",
-    "gerenciar_mudancas", "aprovar_mudancas", "gerenciar_seguranca",
-    "acessar_remotamente", "consultar_auditoria", "gerar_relatorio",
-    "configurar",
-}
-
-PERFIS_ACOES = {
-    "ti_solicitante": {"consultar", "consultar_meus_chamados", "abrir_chamado"},
-    "ti_suporte_n1": {
-        "consultar", "consultar_meus_chamados", "abrir_chamado", "atender_chamado", "resolver_chamado",
-        "registrar_telemetria", "gerenciar_conhecimento", "gerar_relatorio",
-    },
-    "ti_suporte_n2": ACOES_TECNOLOGIA - {
-        "autorizar_descoberta", "aprovar_mudancas", "configurar",
-    },
-    "ti_gestor": ACOES_TECNOLOGIA,
-    "ti_auditor": {"consultar", "consultar_auditoria", "gerar_relatorio"},
-    "ti": ACOES_TECNOLOGIA - {
-        "autorizar_descoberta", "aprovar_mudancas", "configurar",
-    },
-    "ti_plus": ACOES_TECNOLOGIA - {"configurar"},
-}
-
-SLA_MINUTOS = {
-    "Baixa": (480, 4320),
-    "Média": (240, 1440),
-    "Alta": (60, 480),
-    "Crítica": (15, 120),
-}
-
-STATUS_CHAMADO = {
-    "Novo", "Triagem", "Em atendimento", "Aguardando usuário",
-    "Aguardando terceiro", "Resolvido", "Reaberto", "Cancelado",
-}
-
-PROVEDORES_REMOTOS = {"AnyDesk", "TeamViewer", "RustDesk"}
-
-
-def _texto(valor, limite=500) -> str:
-    return str(valor or "").strip()[:limite]
-
-
-def _inteiro(valor, *, minimo=0) -> int:
-    try:
-        numero = int(str(valor).strip())
-    except (TypeError, ValueError) as erro:
-        raise ValueError("Informe um número inteiro válido.") from erro
-    if numero < minimo:
-        raise ValueError(f"O valor deve ser maior ou igual a {minimo}.")
-    return numero
-
-
-def _decimal(valor, *, minimo=0.0, maximo=None, permite_vazio=True):
-    if valor in (None, "") and permite_vazio:
-        return None
-    try:
-        numero = float(str(valor).replace(",", "."))
-    except (TypeError, ValueError) as erro:
-        raise ValueError("Informe um valor numérico válido.") from erro
-    if not math.isfinite(numero) or numero < minimo or (maximo is not None and numero > maximo):
-        raise ValueError("O valor numérico está fora do intervalo permitido.")
-    return numero
-
-
-def _centavos(valor) -> int:
-    texto = str(valor if valor not in (None, "") else "0").strip().replace("R$", "").replace(" ", "")
-    if "," in texto:
-        texto = texto.replace(".", "").replace(",", ".")
-    elif re.fullmatch(r"\d{1,3}(?:\.\d{3})+", texto):
-        texto = texto.replace(".", "")
-    try:
-        numero = Decimal(texto).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    except (InvalidOperation, ValueError) as erro:
-        raise ValueError("Informe um valor monetário válido.") from erro
-    if not numero.is_finite() or numero < 0:
-        raise ValueError("O valor monetário não pode ser negativo.")
-    return int(numero * 100)
-
-
-def _data(valor, *, obrigatoria=False):
-    texto = _texto(valor, 30)
-    if not texto and not obrigatoria:
-        return None
-    for formato in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M"):
-        try:
-            return datetime.strptime(texto, formato).isoformat(sep=" ")[:19]
-        except ValueError:
-            continue
-    raise ValueError("Data inválida. Utilize DD/MM/AAAA ou AAAA-MM-DD.")
-
-
-def _numero(prefixo: str) -> str:
-    return f"{prefixo}-{datetime.now():%Y%m%d%H%M%S}-{uuid4().hex[:4].upper()}"
-
-
-def tem_permissao_tecnologia(ator: dict | None, acao: str) -> bool:
-    if acao not in ACOES_TECNOLOGIA:
-        return False
-    # O portal de suporte é corporativo: qualquer usuário autenticado pode
-    # abrir e consultar os próprios chamados, mesmo sem acesso operacional a TI.
-    if acao in {"abrir_chamado", "consultar_meus_chamados"}:
-        return bool(ator and ator.get("id"))
-    if not tem_permissao(ator, "ti", "ler"):
-        return False
-    if ator and ator.get("perfil") == "admin":
-        return True
-    try:
-        empresa_id, _ = obter_escopo_ator(ator)
-    except (PermissionError, RuntimeError):
-        return False
-    with conectar() as conexao:
-        personalizado = conexao.execute(
-            "SELECT permitido FROM ti_permissoes_acoes WHERE usuario_id=? AND empresa_id=? AND acao=?",
-            (int(ator["id"]), empresa_id, acao),
-        ).fetchone()
-    if personalizado is not None:
-        return bool(personalizado["permitido"])
-    perfil = _texto((ator or {}).get("perfil_acesso"), 50).lower()
-    if perfil in PERFIS_ACOES:
-        return acao in PERFIS_ACOES[perfil]
-    if acao in {"consultar", "gerar_relatorio", "consultar_auditoria"}:
-        return tem_permissao(ator, "ti", "ler")
-    if acao in {"aprovar_mudancas", "autorizar_descoberta"}:
-        return tem_permissao(ator, "ti", "aprovar")
-    return tem_permissao(ator, "ti", "escrever")
-
-
-def exigir_acao(ator: dict, acao: str) -> None:
-    if not tem_permissao_tecnologia(ator, acao):
-        raise PermissionError("Seu perfil não possui permissão para esta ação de Tecnologia.")
-
-
-def salvar_permissao_acao(usuario_id: int, acao: str, permitido: bool, ator: dict) -> None:
-    if ator.get("perfil") != "admin":
-        raise PermissionError("Somente administradores podem configurar ações de Tecnologia.")
-    if acao not in ACOES_TECNOLOGIA:
-        raise ValueError("Ação de Tecnologia inválida.")
-    empresa_id, _ = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        conexao.execute(
-            """INSERT INTO ti_permissoes_acoes (usuario_id,empresa_id,acao,permitido)
-               VALUES (?,?,?,?) ON CONFLICT(usuario_id,empresa_id,acao) DO UPDATE SET
-               permitido=excluded.permitido,atualizado_em=CURRENT_TIMESTAMP""",
-            (int(usuario_id), empresa_id, acao, int(bool(permitido))),
-        )
-
-
-def _evento(conexao, ator, acao, recurso_tipo, recurso_id, antes=None, depois=None, observacao=None) -> None:
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    antes_json = json.dumps(antes, ensure_ascii=False, default=str) if antes is not None else None
-    depois_json = json.dumps(depois, ensure_ascii=False, default=str) if depois is not None else None
-    conexao.execute(
-        """INSERT INTO ti_historico (
-            empresa_id,filial_id,usuario_id,acao,recurso_tipo,recurso_id,
-            antes_json,depois_json,observacao
-        ) VALUES (?,?,?,?,?,?,?,?,?)""",
-        (empresa_id, filial_id, int(ator["id"]), acao, recurso_tipo,
-         int(recurso_id) if recurso_id is not None else None, antes_json, depois_json,
-         _texto(observacao, 1500) or None),
-    )
-    conexao.execute(
-        """INSERT INTO historico_alteracoes (
-            operacao_id,empresa_id,filial_id,usuario_id,modulo,entidade,
-            entidade_id,acao,dados_antes,dados_depois
-        ) VALUES (?,?,?,?, 'ti',?,?,?,?,?)""",
-        (f"TI-{uuid4().hex[:14].upper()}", empresa_id, filial_id, int(ator["id"]),
-         recurso_tipo, int(recurso_id or 0), acao, antes_json, depois_json),
-    )
-    conexao.execute(
-        """INSERT INTO atividades (
-            usuario_id,empresa_id,filial_id,modulo,acao,descricao,recurso_tipo,recurso_id
-        ) VALUES (?,?,?,'ti',?,?,?,?)""",
-        (int(ator["id"]), empresa_id, filial_id, acao,
-         f"Tecnologia: {recurso_tipo} #{recurso_id}", recurso_tipo, recurso_id),
-    )
-
-
-def _notificar(conexao, ator, titulo, mensagem, nivel="aviso", recurso_tipo=None, recurso_id=None) -> None:
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    conexao.execute(
-        """INSERT INTO notificacoes (
-            empresa_id,filial_id,modulo,titulo,mensagem,nivel,recurso_tipo,recurso_id
-        ) VALUES (?,?,'ti',?,?,?,?,?)""",
-        (empresa_id, filial_id, titulo, mensagem, nivel, recurso_tipo, recurso_id),
-    )
-
+from enterprise.domains.tecnologia.base import (
+    ACOES_TECNOLOGIA,
+    PERFIS_ACOES,
+    SLA_MINUTOS,
+    STATUS_CHAMADO,
+    PROVEDORES_REMOTOS,
+    _texto,
+    _inteiro,
+    _decimal,
+    _centavos,
+    _data,
+    _numero,
+    tem_permissao_tecnologia,
+    exigir_acao,
+    salvar_permissao_acao,
+    _evento,
+    _notificar,
+    _abrir_alerta,
+)
 
 def garantir_catalogos(ator: dict) -> dict:
     """Importa uma única vez registros legados sem apagar sua origem."""
@@ -514,40 +341,6 @@ def listar_agentes_ti(ator: dict) -> list[dict]:
     return [dict(linha) for linha in linhas]
 
 
-def registrar_heartbeat(ativo_id: int, metricas: dict, ator: dict) -> int:
-    exigir_acao(ator, "registrar_telemetria")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        ativo = conexao.execute("SELECT * FROM ti_ativos WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1", (int(ativo_id), empresa_id, filial_id)).fetchone()
-        if ativo is None:
-            raise ValueError("Ativo não encontrado.")
-        cpu = _decimal(metricas.get("cpu_percentual"), maximo=100)
-        memoria = _decimal(metricas.get("memoria_percentual"), maximo=100)
-        disco = _decimal(metricas.get("disco_percentual"), maximo=100)
-        livre = _decimal(metricas.get("espaco_livre_gb"))
-        latencia = _decimal(metricas.get("latencia_ms"))
-        uptime = _inteiro(metricas.get("uptime_segundos") or 0)
-        amostras = [x for x in (cpu, memoria, disco) if x is not None]
-        saude = max(0.0, min(100.0, 100 - (sum(amostras) / len(amostras) if amostras else 0) * 0.35))
-        telemetria_id = int(conexao.execute(
-            """INSERT INTO ti_telemetria (
-                ativo_id,cpu_percentual,memoria_percentual,disco_percentual,
-                espaco_livre_gb,uptime_segundos,latencia_ms,agente_versao
-            ) VALUES (?,?,?,?,?,?,?,?)""",
-            (int(ativo_id), cpu, memoria, disco, livre, uptime, latencia, _texto(metricas.get("agente_versao"), 40) or None),
-        ).lastrowid)
-        estado = "Com alerta" if any(x is not None and x >= 90 for x in (cpu, memoria, disco)) else "Online"
-        conexao.execute(
-            """UPDATE ti_ativos SET estado_conectividade=?,saude_percentual=?,ultimo_contato=CURRENT_TIMESTAMP,
-               agente_versao=?,endereco_ip=COALESCE(?,endereco_ip),atualizado_em=CURRENT_TIMESTAMP WHERE id=?""",
-            (estado, saude, _texto(metricas.get("agente_versao"), 40) or ativo["agente_versao"],
-             _texto(metricas.get("endereco_ip"), 45) or None, int(ativo_id)),
-        )
-        if estado == "Com alerta":
-            _abrir_alerta(conexao, ator, "telemetria", "Recurso acima do limite", f"{ativo['patrimonio']} apresentou consumo igual ou superior a 90%.", "Crítico", "ti_ativos", ativo_id)
-        return telemetria_id
-
-
 def iniciar_manutencao(ativo_id: int, problema: str, ator: dict, *, chamado_id=None, previsao=None) -> int:
     exigir_acao(ator, "gerenciar_manutencao")
     empresa_id, filial_id = obter_escopo_ator(ator)
@@ -669,48 +462,6 @@ def autorizar_segmento_rede(segmento_id: int, justificativa: str, ator: dict) ->
             raise ValueError("Segmento não encontrado.")
         conexao.execute("UPDATE ti_segmentos_rede SET autorizado=1,justificativa_autorizacao=?,autorizado_por=?,autorizado_em=CURRENT_TIMESTAMP WHERE id=?", (motivo, int(ator["id"]), int(segmento_id)))
         _evento(conexao, ator, "descoberta_autorizada", "ti_segmentos_rede", segmento_id, antes={"autorizado": False}, depois={"autorizado": True}, observacao=motivo)
-
-
-def registrar_dispositivo_descoberto(segmento_id: int, dados: dict, ator: dict) -> int:
-    """Registra resultado vindo de agente/conector; não executa varredura."""
-    exigir_acao(ator, "registrar_descoberta")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    endereco = _texto(dados.get("endereco_ip"), 45)
-    try:
-        ip = ipaddress.ip_address(endereco)
-    except ValueError as erro:
-        raise ValueError("Endereço IP inválido.") from erro
-    with conectar() as conexao:
-        segmento = conexao.execute("SELECT * FROM ti_segmentos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1", (int(segmento_id), empresa_id, filial_id)).fetchone()
-        if segmento is None or not segmento["autorizado"]:
-            raise PermissionError("A descoberta só pode registrar dados em segmento previamente autorizado.")
-        if ip not in ipaddress.ip_network(segmento["cidr"]):
-            raise ValueError("O endereço não pertence ao segmento autorizado.")
-        existente = conexao.execute("SELECT id FROM ti_dispositivos_rede WHERE segmento_id=? AND endereco_ip=?", (int(segmento_id), endereco)).fetchone()
-        if existente:
-            dispositivo_id = int(existente["id"])
-            conexao.execute("""UPDATE ti_dispositivos_rede SET endereco_mac=COALESCE(?,endereco_mac),hostname=COALESCE(?,hostname),
-                fabricante=COALESCE(?,fabricante),tipo_estimado=COALESCE(?,tipo_estimado),status=?,origem=?,
-                ultimo_ping_ms=?,ativo=1,ultima_deteccao=CURRENT_TIMESTAMP WHERE id=?""",
-                (_texto(dados.get("endereco_mac"), 30) or None, _texto(dados.get("hostname"), 120) or None,
-                 _texto(dados.get("fabricante"), 120) or None, _texto(dados.get("tipo_estimado"), 60) or None,
-                 _texto(dados.get("status") or "Online", 30), _texto(dados.get("origem") or "Agente", 30),
-                 _decimal(dados.get("ultimo_ping_ms")), dispositivo_id))
-        else:
-            dispositivo_id = int(conexao.execute(
-                """INSERT INTO ti_dispositivos_rede (
-                    empresa_id,filial_id,segmento_id,endereco_ip,endereco_mac,hostname,
-                    fabricante,tipo_estimado,status,origem,ultimo_ping_ms,ativo
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)""",
-                (empresa_id, filial_id, int(segmento_id), endereco,
-                 _texto(dados.get("endereco_mac"), 30) or None, _texto(dados.get("hostname"), 120) or None,
-                 _texto(dados.get("fabricante"), 120) or None, _texto(dados.get("tipo_estimado"), 60) or None,
-                 _texto(dados.get("status") or "Novo", 30), _texto(dados.get("origem") or "Agente", 30),
-                 _decimal(dados.get("ultimo_ping_ms"))),
-            ).lastrowid)
-            _abrir_alerta(conexao, ator, "dispositivo_novo", "Novo dispositivo identificado", f"{endereco} ainda não está vinculado ao patrimônio.", "Aviso", "ti_dispositivos_rede", dispositivo_id)
-        _evento(conexao, ator, "descoberta_registrada", "ti_dispositivos_rede", dispositivo_id, depois={"ip": endereco, "origem": dados.get("origem") or "Agente"})
-        return dispositivo_id
 
 
 def criar_licenca(dados: dict, ator: dict) -> int:
@@ -978,6 +729,8 @@ def solicitar_acesso_remoto(ativo_id: int, provedor: str, justificativa: str, at
     motivo = _texto(justificativa, 1000)
     if len(motivo) < 10:
         raise ValueError("Informe a justificativa operacional do acesso.")
+    if not chamado_id:
+        raise ValueError("Vincule o acesso remoto a um chamado autorizado.")
     if not consentimento:
         raise PermissionError("Confirme o consentimento e a autorização antes de iniciar o acesso remoto.")
     with conectar() as conexao:
@@ -1019,16 +772,6 @@ def encerrar_acesso_remoto(acesso_id: int, resultado: str, ator: dict) -> None:
             duracao_segundos=MAX(0,CAST((julianday('now')-julianday(iniciado_em))*86400 AS INTEGER)),resultado=? WHERE id=?""",
             (_texto(resultado, 1500), int(acesso_id)))
         _evento(conexao, ator, "acesso_remoto_encerrado", "ti_acessos_remotos", acesso_id, antes={"status": acesso["status"]}, depois={"status": "Encerrada", "resultado": resultado})
-
-
-def _abrir_alerta(conexao, ator, tipo, titulo, mensagem, severidade, recurso_tipo, recurso_id) -> None:
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    conexao.execute(
-        """INSERT OR IGNORE INTO ti_alertas (
-            empresa_id,filial_id,tipo,titulo,mensagem,severidade,recurso_tipo,recurso_id,status
-        ) VALUES (?,?,?,?,?,?,?,?,'Aberto')""",
-        (empresa_id, filial_id, tipo, titulo, mensagem, severidade, recurso_tipo, int(recurso_id)),
-    )
 
 
 def gerar_alertas_tecnologia(ator: dict) -> int:
@@ -1156,7 +899,7 @@ def listar_secao(secao: str, ator: dict, *, pesquisa="", limite=500) -> list[dic
         "problemas": ("""SELECT p.*,u.nome responsavel_nome,COUNT(pc.chamado_id) chamados_relacionados FROM ti_problemas p
             LEFT JOIN usuarios u ON u.id=p.responsavel_id LEFT JOIN ti_problema_chamados pc ON pc.problema_id=p.id
             WHERE p.empresa_id=? AND p.filial_id IS ? AND (p.numero LIKE ? OR p.titulo LIKE ? OR p.status LIKE ?)
-            GROUP BY p.id ORDER BY p.criado_em DESC""", (empresa_id, filial_id, termo, termo, termo)),
+            GROUP BY p.id, u.nome ORDER BY p.criado_em DESC""", (empresa_id, filial_id, termo, termo, termo)),
         "seguranca": ("""SELECT i.*,a.patrimonio,si.nome sistema_nome,u.nome responsavel_nome FROM ti_incidentes_seguranca i
             LEFT JOIN ti_ativos a ON a.id=i.ativo_id LEFT JOIN ti_sistemas si ON si.id=i.sistema_id LEFT JOIN usuarios u ON u.id=i.responsavel_id
             WHERE i.empresa_id=? AND i.filial_id IS ? AND (i.numero LIKE ? OR i.titulo LIKE ? OR i.status LIKE ?)
@@ -1212,7 +955,7 @@ def analisar_tecnologia(ator: dict) -> dict:
             """SELECT l.nome,l.quantidade_contratada,COUNT(CASE WHEN a.ativo=1 THEN 1 END) utilizadas
                FROM ti_licencas l LEFT JOIN ti_licenca_atribuicoes a ON a.licenca_id=l.id
                WHERE l.empresa_id=? AND l.filial_id IS ? AND l.status='Ativa'
-               GROUP BY l.id HAVING utilizadas < l.quantidade_contratada*0.5 ORDER BY l.quantidade_contratada-utilizadas DESC LIMIT 8""", (empresa_id, filial_id)
+               GROUP BY l.id HAVING COUNT(CASE WHEN a.ativo=1 THEN 1 END) < l.quantidade_contratada*0.5 ORDER BY l.quantidade_contratada-COUNT(CASE WHEN a.ativo=1 THEN 1 END) DESC LIMIT 8""", (empresa_id, filial_id)
         ).fetchall()]
     pontos = []
     if resumo["sla_vencido"]:
@@ -1281,433 +1024,17 @@ def gerar_relatorio_tecnologia(tipo: str, formato: str, destino: str | Path, ato
 # Tecnologia 3.0 · operações interativas de rede / CRUD
 # ---------------------------------------------------------------------------
 
-def contar_segmentos_ativos(ator: dict) -> int:
-    exigir_acao(ator, "consultar")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        return int(conexao.execute(
-            "SELECT COUNT(*) FROM ti_segmentos_rede WHERE empresa_id=? AND filial_id IS ? AND ativo=1",
-            (empresa_id, filial_id),
-        ).fetchone()[0])
+# V9.5: operações de infraestrutura foram isoladas do núcleo ITSM.
+from enterprise.domains.tecnologia.agentes import registrar_heartbeat, registrar_snapshot_agente
+from enterprise.domains.tecnologia.infraestrutura import (
+    registrar_dispositivo_descoberto, contar_segmentos_ativos, obter_segmento_rede, _normalizar_segmento, atualizar_segmento_rede,
+    revogar_autorizacao_segmento_rede, preparar_firewall_segmento, remover_firewall_segmento,
+    remover_segmento_rede, descobrir_segmento_rede, diagnosticar_segmento_rede, atualizar_ativo,
+    remover_ativo, vincular_dispositivo_ativo, atualizar_dispositivo_rede, remover_dispositivo_rede,
+    detalhar_ativo, detalhar_dispositivo_rede,
+)
 
-
-def obter_segmento_rede(segmento_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "consultar")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        linha = conexao.execute(
-            "SELECT * FROM ti_segmentos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(segmento_id), empresa_id, filial_id),
-        ).fetchone()
-    if linha is None:
-        raise ValueError("Segmento não encontrado.")
-    return dict(linha)
-
-
-def _normalizar_segmento(dados: dict) -> dict:
-    nome = _texto(dados.get("nome"), 120)
-    if not nome:
-        raise ValueError("Informe um nome para o segmento.")
-    try:
-        rede = ipaddress.ip_network(_texto(dados.get("cidr"), 60), strict=False)
-    except ValueError as erro:
-        raise ValueError("Informe uma rede CIDR válida, como 192.168.1.0/24.") from erro
-    if not rede.is_private:
-        raise ValueError("Somente segmentos privados administrados pela empresa podem ser cadastrados.")
-    if rede.num_addresses > 4096:
-        raise ValueError("O segmento é amplo demais. Divida-o em redes de até 4096 endereços.")
-    gateway = _texto(dados.get("gateway"), 45) or None
-    if gateway:
-        try:
-            gateway_ip = ipaddress.ip_address(gateway)
-        except ValueError as erro:
-            raise ValueError("Gateway inválido.") from erro
-        if gateway_ip not in rede:
-            raise ValueError("O gateway deve pertencer ao CIDR informado.")
-    return {
-        "nome": nome,
-        "cidr": str(rede),
-        "vlan": _texto(dados.get("vlan"), 30) or None,
-        "gateway": gateway,
-        "dns": _texto(dados.get("dns"), 120) or None,
-        "departamento_id": int(dados["departamento_id"]) if dados.get("departamento_id") else None,
-    }
-
-
-def atualizar_segmento_rede(segmento_id: int, dados: dict, ator: dict) -> None:
-    exigir_acao(ator, "gerenciar_rede")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    normalizado = _normalizar_segmento(dados)
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_segmentos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(segmento_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Segmento não encontrado.")
-        if str(atual["cidr"]) != normalizado["cidr"]:
-            dispositivos = int(conexao.execute(
-                "SELECT COUNT(*) FROM ti_dispositivos_rede WHERE segmento_id=? AND ativo=1",
-                (int(segmento_id),),
-            ).fetchone()[0])
-            if dispositivos:
-                raise ValueError("O CIDR não pode ser alterado enquanto houver dispositivos registrados. Arquive os dispositivos ou crie um novo segmento.")
-            conflito = conexao.execute(
-                """SELECT id, ativo FROM ti_segmentos_rede
-                   WHERE empresa_id=? AND filial_id IS ? AND cidr=? AND id<>?
-                   LIMIT 1""",
-                (empresa_id, filial_id, normalizado["cidr"], int(segmento_id)),
-            ).fetchone()
-            if conflito is not None:
-                estado = "ativo" if bool(conflito["ativo"]) else "arquivado"
-                raise ValueError(
-                    f"O CIDR {normalizado['cidr']} já pertence a outro segmento {estado} desta filial."
-                )
-        try:
-            conexao.execute(
-                """UPDATE ti_segmentos_rede SET nome=?,cidr=?,vlan=?,gateway=?,dns=?,departamento_id=?
-                   WHERE id=?""",
-                (normalizado["nome"], normalizado["cidr"], normalizado["vlan"], normalizado["gateway"],
-                 normalizado["dns"], normalizado["departamento_id"], int(segmento_id)),
-            )
-        except sqlite3.IntegrityError as erro:
-            raise ValueError(
-                f"Não foi possível alterar o segmento para {normalizado['cidr']}: o CIDR já está em uso."
-            ) from erro
-        depois = dict(conexao.execute("SELECT * FROM ti_segmentos_rede WHERE id=?", (int(segmento_id),)).fetchone())
-        _evento(conexao, ator, "segmento_atualizado", "ti_segmentos_rede", segmento_id, antes=dict(atual), depois=depois)
-
-
-def revogar_autorizacao_segmento_rede(segmento_id: int, ator: dict, motivo: str = "") -> None:
-    exigir_acao(ator, "autorizar_descoberta")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_segmentos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(segmento_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Segmento não encontrado.")
-        conexao.execute(
-            """UPDATE ti_segmentos_rede SET autorizado=0,justificativa_autorizacao=NULL,
-               autorizado_por=NULL,autorizado_em=NULL WHERE id=?""",
-            (int(segmento_id),),
-        )
-        _evento(conexao, ator, "descoberta_revogada", "ti_segmentos_rede", segmento_id,
-                antes={"autorizado": bool(atual["autorizado"])}, depois={"autorizado": False},
-                observacao=_texto(motivo, 1000) or "Autorização revogada pelo operador.")
-
-
-def preparar_firewall_segmento(segmento_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "autorizar_descoberta")
-    segmento = obter_segmento_rede(segmento_id, ator)
-    from enterprise.firewall_ti import preparar_descoberta_local
-    resultado = preparar_descoberta_local(segmento_id, segmento["cidr"])
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        conexao.execute(
-            "UPDATE ti_segmentos_rede SET firewall_status=?,firewall_regra=? WHERE id=? AND empresa_id=? AND filial_id IS ?",
-            (resultado.get("status"), resultado.get("regra"), int(segmento_id), empresa_id, filial_id),
-        )
-        _evento(conexao, ator, "firewall_segmento_preparado", "ti_segmentos_rede", segmento_id,
-                depois={"status": resultado.get("status"), "regra": resultado.get("regra")},
-                observacao=resultado.get("mensagem"))
-    return resultado
-
-
-def remover_firewall_segmento(segmento_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "autorizar_descoberta")
-    segmento = obter_segmento_rede(segmento_id, ator)
-    from enterprise.firewall_ti import remover_descoberta_local
-    resultado = remover_descoberta_local(segmento_id)
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        conexao.execute(
-            "UPDATE ti_segmentos_rede SET firewall_status='Removida',firewall_regra=NULL WHERE id=? AND empresa_id=? AND filial_id IS ?",
-            (int(segmento_id), empresa_id, filial_id),
-        )
-        _evento(conexao, ator, "firewall_segmento_removido", "ti_segmentos_rede", segmento_id,
-                antes={"firewall_status": segmento.get("firewall_status")}, depois={"firewall_status": "Removida"})
-    return resultado
-
-
-def remover_segmento_rede(segmento_id: int, ator: dict) -> dict:
-    """Arquiva o segmento. A trilha e as descobertas permanecem no histórico."""
-    exigir_acao(ator, "gerenciar_rede")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_segmentos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(segmento_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Segmento não encontrado.")
-        conexao.execute(
-            "UPDATE ti_segmentos_rede SET ativo=0,autorizado=0 WHERE id=?",
-            (int(segmento_id),),
-        )
-        conexao.execute(
-            "UPDATE ti_dispositivos_rede SET ativo=0,status='Arquivado' WHERE segmento_id=?",
-            (int(segmento_id),),
-        )
-        _evento(conexao, ator, "segmento_removido", "ti_segmentos_rede", segmento_id,
-                antes=dict(atual), depois={"ativo": False, "autorizado": False})
-    aviso = None
-    if atual["firewall_regra"]:
-        try:
-            from enterprise.firewall_ti import remover_descoberta_local
-            remover_descoberta_local(segmento_id)
-        except Exception as erro:
-            aviso = f"O segmento foi arquivado, mas a regra do firewall precisa ser removida manualmente: {erro}"
-    return {"removido": True, "aviso": aviso}
-
-
-def descobrir_segmento_rede(segmento_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "registrar_descoberta")
-    segmento = obter_segmento_rede(segmento_id, ator)
-    if not segmento["autorizado"]:
-        raise PermissionError("Autorize explicitamente o segmento antes de executar a descoberta.")
-    from enterprise.rede_ti import descobrir_hosts
-    resultado = descobrir_hosts(segmento["cidr"])
-    vistos: set[str] = set()
-    for dispositivo in resultado["dispositivos"]:
-        vistos.add(dispositivo["endereco_ip"])
-        registrar_dispositivo_descoberto(segmento_id, dispositivo, ator)
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        existentes = conexao.execute(
-            "SELECT id,endereco_ip FROM ti_dispositivos_rede WHERE segmento_id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(segmento_id), empresa_id, filial_id),
-        ).fetchall()
-        for item in existentes:
-            if item["endereco_ip"] not in vistos:
-                conexao.execute(
-                    "UPDATE ti_dispositivos_rede SET status='Não respondeu' WHERE id=?",
-                    (int(item["id"]),),
-                )
-        conexao.execute(
-            """UPDATE ti_segmentos_rede SET ultima_varredura_em=CURRENT_TIMESTAMP,
-               ultima_varredura_total=?,ultima_varredura_online=? WHERE id=?""",
-            (int(resultado["total_testados"]), int(resultado["online"]), int(segmento_id)),
-        )
-        _evento(conexao, ator, "descoberta_executada", "ti_segmentos_rede", segmento_id,
-                depois={"total_testados": resultado["total_testados"], "online": resultado["online"], "duracao_segundos": resultado["duracao_segundos"]})
-    return resultado
-
-
-def diagnosticar_segmento_rede(segmento_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "consultar")
-    segmento = obter_segmento_rede(segmento_id, ator)
-    from enterprise.rede_ti import diagnosticar_conectividade
-    resultado = diagnosticar_conectividade(gateway=segmento.get("gateway"))
-    resultado.update({"segmento_id": int(segmento_id), "segmento": segmento["nome"], "cidr": segmento["cidr"]})
-    return resultado
-
-
-def atualizar_ativo(ativo_id: int, dados: dict, ator: dict) -> None:
-    exigir_acao(ator, "gerenciar_ativos")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    permitidos = {
-        "nome", "tipo", "fabricante", "modelo", "numero_serie", "hostname", "endereco_ip",
-        "endereco_mac", "sistema_operacional", "processador", "localizacao", "status", "criticidade",
-        "remote_provider", "remote_id", "usuario_sessao", "remote_alias",
-    }
-    campos = {k: _texto(v, 180) or None for k, v in dados.items() if k in permitidos}
-    for chave in ("memoria_gb", "armazenamento_gb"):
-        if chave in dados:
-            campos[chave] = _decimal(dados.get(chave) or 0, permite_vazio=False)
-    if "usuario_responsavel_id" in dados:
-        campos["usuario_responsavel_id"] = int(dados["usuario_responsavel_id"]) if dados.get("usuario_responsavel_id") else None
-    if not campos:
-        raise ValueError("Nenhum campo informado para atualização.")
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_ativos WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(ativo_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Ativo não encontrado.")
-        atribuicoes = ",".join(f"{campo}=?" for campo in campos)
-        conexao.execute(
-            f"UPDATE ti_ativos SET {atribuicoes},atualizado_por=?,atualizado_em=CURRENT_TIMESTAMP WHERE id=?",
-            (*campos.values(), int(ator["id"]), int(ativo_id)),
-        )
-        depois = dict(conexao.execute("SELECT * FROM ti_ativos WHERE id=?", (int(ativo_id),)).fetchone())
-        _evento(conexao, ator, "ativo_atualizado", "ti_ativos", ativo_id, antes=dict(atual), depois=depois)
-
-
-def remover_ativo(ativo_id: int, ator: dict) -> None:
-    exigir_acao(ator, "gerenciar_ativos")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_ativos WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(ativo_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Ativo não encontrado.")
-        conexao.execute("UPDATE ti_dispositivos_rede SET ativo_id=NULL WHERE ativo_id=?", (int(ativo_id),))
-        conexao.execute(
-            "UPDATE ti_ativos SET ativo=0,status='Desativado',estado_conectividade='Desconhecido',atualizado_por=?,atualizado_em=CURRENT_TIMESTAMP WHERE id=?",
-            (int(ator["id"]), int(ativo_id)),
-        )
-        _evento(conexao, ator, "ativo_removido", "ti_ativos", ativo_id, antes=dict(atual), depois={"ativo": False, "status": "Desativado"})
-
-
-def vincular_dispositivo_ativo(dispositivo_id: int, ativo_id: int, ator: dict) -> None:
-    exigir_acao(ator, "gerenciar_ativos")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        dispositivo = conexao.execute(
-            "SELECT * FROM ti_dispositivos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(dispositivo_id), empresa_id, filial_id),
-        ).fetchone()
-        ativo = conexao.execute(
-            "SELECT * FROM ti_ativos WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(ativo_id), empresa_id, filial_id),
-        ).fetchone()
-        if dispositivo is None or ativo is None:
-            raise ValueError("Dispositivo ou ativo não encontrado no escopo atual.")
-        conexao.execute("UPDATE ti_dispositivos_rede SET ativo_id=? WHERE id=?", (int(ativo_id), int(dispositivo_id)))
-        conexao.execute(
-            """UPDATE ti_ativos SET endereco_ip=COALESCE(?,endereco_ip),endereco_mac=COALESCE(?,endereco_mac),
-               hostname=COALESCE(?,hostname),estado_conectividade=?,ultimo_contato=CURRENT_TIMESTAMP,
-               atualizado_por=?,atualizado_em=CURRENT_TIMESTAMP WHERE id=?""",
-            (dispositivo["endereco_ip"], dispositivo["endereco_mac"], dispositivo["hostname"],
-             "Online" if dispositivo["status"] == "Online" else ativo["estado_conectividade"], int(ator["id"]), int(ativo_id)),
-        )
-        _evento(conexao, ator, "dispositivo_vinculado", "ti_dispositivos_rede", dispositivo_id,
-                depois={"ativo_id": int(ativo_id), "patrimonio": ativo["patrimonio"]})
-
-
-def atualizar_dispositivo_rede(dispositivo_id: int, dados: dict, ator: dict) -> None:
-    exigir_acao(ator, "gerenciar_rede")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    campos = {
-        "hostname": _texto(dados.get("hostname"), 120) or None,
-        "fabricante": _texto(dados.get("fabricante"), 120) or None,
-        "tipo_estimado": _texto(dados.get("tipo_estimado"), 60) or None,
-        "observacao": _texto(dados.get("observacao"), 1000) or None,
-    }
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_dispositivos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(dispositivo_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Dispositivo não encontrado.")
-        conexao.execute(
-            "UPDATE ti_dispositivos_rede SET hostname=?,fabricante=?,tipo_estimado=?,observacao=? WHERE id=?",
-            (*campos.values(), int(dispositivo_id)),
-        )
-        _evento(conexao, ator, "dispositivo_identificado", "ti_dispositivos_rede", dispositivo_id, antes=dict(atual), depois=campos)
-
-
-def remover_dispositivo_rede(dispositivo_id: int, ator: dict) -> None:
-    exigir_acao(ator, "gerenciar_rede")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        atual = conexao.execute(
-            "SELECT * FROM ti_dispositivos_rede WHERE id=? AND empresa_id=? AND filial_id IS ? AND ativo=1",
-            (int(dispositivo_id), empresa_id, filial_id),
-        ).fetchone()
-        if atual is None:
-            raise ValueError("Dispositivo não encontrado.")
-        conexao.execute("UPDATE ti_dispositivos_rede SET ativo=0,status='Arquivado' WHERE id=?", (int(dispositivo_id),))
-        _evento(conexao, ator, "dispositivo_removido", "ti_dispositivos_rede", dispositivo_id, antes=dict(atual), depois={"ativo": False})
-
-
-def detalhar_ativo(ativo_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "consultar")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        linha = conexao.execute(
-            """SELECT a.*,u.nome usuario_responsavel,d.nome departamento_nome,
-               t.cpu_percentual,t.memoria_percentual,t.disco_percentual,t.espaco_livre_gb,t.uptime_segundos,t.latencia_ms,t.coletado_em telemetria_em,
-               g.status agent_status,g.ultimo_heartbeat agent_heartbeat,g.ultimo_ip agent_ultimo_ip
-               FROM ti_ativos a LEFT JOIN usuarios u ON u.id=a.usuario_responsavel_id
-               LEFT JOIN departamentos d ON d.id=a.departamento_id
-               LEFT JOIN ti_telemetria t ON t.id=(SELECT id FROM ti_telemetria WHERE ativo_id=a.id ORDER BY coletado_em DESC,id DESC LIMIT 1)
-               LEFT JOIN ti_agentes g ON g.ativo_id=a.id AND g.ativo=1
-               WHERE a.id=? AND a.empresa_id=? AND a.filial_id IS ? AND a.ativo=1""",
-            (int(ativo_id), empresa_id, filial_id),
-        ).fetchone()
-    if linha is None:
-        raise ValueError("Ativo não encontrado.")
-    return dict(linha)
-
-
-def detalhar_dispositivo_rede(dispositivo_id: int, ator: dict) -> dict:
-    exigir_acao(ator, "consultar")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    with conectar() as conexao:
-        linha = conexao.execute(
-            """SELECT d.*,s.nome segmento_nome,s.cidr,s.gateway,s.dns,s.vlan,
-               a.patrimonio,a.nome ativo_nome,a.fabricante ativo_fabricante,a.modelo,a.numero_serie,
-               a.sistema_operacional,a.versao_sistema,a.arquitetura,a.processador,a.memoria_gb,a.armazenamento_gb,
-               a.usuario_sessao,a.usuario_responsavel_id,a.localizacao,a.estado_conectividade,a.saude_percentual,
-               a.remote_provider,a.remote_id,a.remote_alias,a.remote_status,a.remote_versao,a.agente_versao,a.ultimo_contato,
-               u.nome usuario_responsavel,
-               t.cpu_percentual,t.memoria_percentual,t.disco_percentual,t.espaco_livre_gb,t.uptime_segundos,t.latencia_ms
-               FROM ti_dispositivos_rede d JOIN ti_segmentos_rede s ON s.id=d.segmento_id
-               LEFT JOIN ti_ativos a ON a.id=d.ativo_id LEFT JOIN usuarios u ON u.id=a.usuario_responsavel_id
-               LEFT JOIN ti_telemetria t ON t.id=(SELECT id FROM ti_telemetria WHERE ativo_id=a.id ORDER BY coletado_em DESC,id DESC LIMIT 1)
-               WHERE d.id=? AND d.empresa_id=? AND d.filial_id IS ? AND d.ativo=1""",
-            (int(dispositivo_id), empresa_id, filial_id),
-        ).fetchone()
-    if linha is None:
-        raise ValueError("Dispositivo não encontrado.")
-    return dict(linha)
-
-
-def registrar_snapshot_agente(payload: dict, ator: dict) -> int:
-    """Ingere o contrato do agente já existente e atualiza ativo + telemetria.
-
-    O método é independente do transporte HTTP; poderá ser usado pelo receptor
-    central do agente sem acoplar o domínio a FastAPI/Flask.
-    """
-    exigir_acao(ator, "registrar_telemetria")
-    empresa_id, filial_id = obter_escopo_ator(ator)
-    patrimonio = _texto(payload.get("patrimonio"), 80)
-    dispositivo = payload.get("dispositivo") or {}
-    metricas = dict(payload.get("metricas") or {})
-    remoto = payload.get("acesso_remoto") or {}
-    if not patrimonio:
-        raise ValueError("Snapshot do agente sem patrimônio.")
-    with conectar() as conexao:
-        ativo = conexao.execute(
-            "SELECT * FROM ti_ativos WHERE empresa_id=? AND filial_id IS ? AND patrimonio=? AND ativo=1",
-            (empresa_id, filial_id, patrimonio),
-        ).fetchone()
-        if ativo is None:
-            raise ValueError("O patrimônio do agente ainda não está cadastrado como ativo.")
-        ativo_id = int(ativo["id"])
-        ips = dispositivo.get("enderecos_ip") or []
-        macs = dispositivo.get("enderecos_mac") or []
-        conexao.execute(
-            """UPDATE ti_ativos SET agent_id=?,hostname=?,fqdn=?,endereco_ip=COALESCE(?,endereco_ip),
-               endereco_mac=COALESCE(?,endereco_mac),sistema_operacional=?,versao_sistema=?,arquitetura=?,processador=?,
-               memoria_gb=?,armazenamento_gb=?,usuario_sessao=?,agente_versao=?,remote_provider=?,remote_id=?,
-               remote_alias=?,remote_status=?,remote_versao=?,estado_conectividade='Online',ultimo_contato=CURRENT_TIMESTAMP,
-               atualizado_por=?,atualizado_em=CURRENT_TIMESTAMP WHERE id=?""",
-            (_texto(payload.get("agent_id"), 120) or None, _texto(dispositivo.get("hostname"), 120) or None,
-             _texto(dispositivo.get("fqdn"), 180) or None, _texto(dispositivo.get("endereco_ip") or (ips[0] if ips else None), 45) or None,
-             _texto(dispositivo.get("endereco_mac") or (macs[0] if macs else None), 30) or None,
-             _texto(dispositivo.get("sistema_operacional"), 150) or None, _texto(dispositivo.get("versao_sistema"), 180) or None,
-             _texto(dispositivo.get("arquitetura"), 80) or None, _texto(dispositivo.get("processador"), 180) or None,
-             _decimal(dispositivo.get("memoria_total_gb") or 0, permite_vazio=False),
-             _decimal(dispositivo.get("armazenamento_total_gb") or 0, permite_vazio=False),
-             _texto(dispositivo.get("executado_como"), 120) or None, _texto(payload.get("agente_versao"), 40) or None,
-             _texto(remoto.get("provedor"), 30) or None, _texto(remoto.get("identificador"), 120) or None,
-             _texto(remoto.get("alias"), 120) or None, _texto(remoto.get("status"), 80) or None,
-             _texto(remoto.get("versao"), 80) or None, int(ator["id"]), ativo_id),
-        )
-    metricas["agente_versao"] = payload.get("agente_versao")
-    metricas["endereco_ip"] = dispositivo.get("endereco_ip") or (ips[0] if ips else None)
-    registrar_heartbeat(ativo_id, metricas, ator)
-    return ativo_id
-
-# V9.1: em estações Central/Cliente, as APIs transacionais permitidas acima
+# V9.1+: em estações Central/Cliente, as APIs transacionais públicas desta fachada
 # são executadas no Servidor Corporativo. No servidor/standalone permanecem locais.
 from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
 _instalar_proxy_modulo(globals(), __name__)

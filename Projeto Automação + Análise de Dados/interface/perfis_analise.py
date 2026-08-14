@@ -67,7 +67,7 @@ class TelaPerfisAnalise:
             tk.Label(
                 card,
                 text=perfil["descricao"],
-                font=("Segoe UI", 9),
+                font=("Inter", 9),
                 fg=CORES["text_sec"],
                 bg=CORES["card"],
                 justify="left",
@@ -77,7 +77,7 @@ class TelaPerfisAnalise:
             tk.Label(
                 card,
                 text=f"{ativos} módulos ativos",
-                font=("Segoe UI", 8, "bold"),
+                font=("Inter", 8, "bold"),
                 fg=CORES["primary"],
                 bg=CORES["card"],
             ).pack(anchor="w", padx=24, pady=(14, 0))

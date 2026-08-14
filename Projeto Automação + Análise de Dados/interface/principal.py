@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+import queue
+import threading
 import tkinter as tk
 
 from auth.sessao import SESSAO
-from enterprise.catalogo import MODULOS
-from enterprise.central import resumo_cockpit
-from enterprise.contexto import obter_contexto
-from enterprise.perfis_acesso import nome_perfil_acesso
+from services.catalogo import MODULOS
+from services.central import resumo_cockpit
+from services.contexto import obter_contexto
+from services.perfis_acesso import nome_perfil_acesso
 from interface.componentes import (
     AreaRolavel,
     GradeResponsiva,
@@ -29,11 +31,82 @@ class TelaPrincipal:
     def __init__(self, root, navegacao):
         self.root = root
         self.navegacao = navegacao
-        self.dados = resumo_cockpit(SESSAO.usuario)
-        self.contexto = obter_contexto()
+        # O shell visual é criado antes de qualquer RPC. Assim, uma estação com
+        # rede lenta nunca fica com a janela principal completamente em branco.
+        self.dados = self._dados_vazios()
+        self.contexto = {
+            "empresa_id": None,
+            "empresa_nome": "Carregando contexto",
+            "filial_id": None,
+            "filial_nome": None,
+        }
+        self._carregando = True
+        self._erro_carregamento = ""
+        self._fila_carregamento: queue.Queue = queue.Queue(maxsize=1)
         self.container = tk.Frame(root, bg=CORES["bg"])
         self.container.pack(fill="both", expand=True)
         self.criar_interface()
+        self._iniciar_carregamento()
+
+    @staticmethod
+    def _dados_vazios() -> dict:
+        return {"modulos": {}, "aprovacoes_pendentes": 0, "atividades": [], "notificacoes": []}
+
+    def _iniciar_carregamento(self):
+        if not self._carregando:
+            self._carregando = True
+            self._erro_carregamento = ""
+            self._renderizar_novamente()
+
+        def carregar():
+            try:
+                dados = resumo_cockpit(SESSAO.usuario)
+                contexto = obter_contexto()
+                resultado = (True, dados, contexto)
+            except Exception as exc:
+                resultado = (False, type(exc).__name__, str(exc) or "Falha ao carregar dados do servidor.")
+            try:
+                self._fila_carregamento.put_nowait(resultado)
+            except queue.Full:
+                pass
+
+        threading.Thread(target=carregar, name="TelaPrincipal-Carregamento", daemon=True).start()
+        self.root.after(50, self._processar_carregamento)
+
+    def _processar_carregamento(self):
+        try:
+            if not self.container.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        try:
+            resultado = self._fila_carregamento.get_nowait()
+        except queue.Empty:
+            self.root.after(50, self._processar_carregamento)
+            return
+        self._carregando = False
+        if resultado[0]:
+            _, dados, contexto = resultado
+            base = self._dados_vazios()
+            base.update(dict(dados or {}))
+            self.dados = base
+            self.contexto = dict(contexto or self.contexto)
+            self._erro_carregamento = ""
+        else:
+            _, _tipo, mensagem = resultado
+            self.dados = self._dados_vazios()
+            self._erro_carregamento = mensagem
+        self._renderizar_novamente()
+
+    def _renderizar_novamente(self):
+        try:
+            if not self.container.winfo_exists():
+                return
+            for filho in self.container.winfo_children():
+                filho.destroy()
+            self.criar_interface()
+        except tk.TclError:
+            return
 
     def criar_interface(self):
         criar_sidebar(
@@ -55,11 +128,32 @@ class TelaPrincipal:
 
         criar_cabecalho(
             conteudo,
-            "Central da aplicação",
-            "Visão geral e acesso seguro às principais áreas da plataforma.",
+            "Minha Central",
+            "Aprovações, tarefas, alertas, solicitações e acesso às áreas da empresa em um único ponto.",
             breadcrumb=self._breadcrumb(),
             etiqueta=f"INTERFACE {VERSAO_INTERFACE}",
         )
+
+        if self._carregando:
+            faixa = criar_card(conteudo)
+            faixa.pack(fill="x", pady=(12, 0))
+            tk.Label(
+                faixa,
+                text="◌  Carregando dados corporativos do servidor… A interface permanece disponível.",
+                font=FONTES["texto_pequeno"], fg=CORES["text_sec"], bg=CORES["card"], anchor="w",
+            ).pack(fill="x", padx=16, pady=11)
+        elif self._erro_carregamento:
+            faixa = criar_card(conteudo)
+            faixa.pack(fill="x", pady=(12, 0))
+            linha_erro = tk.Frame(faixa, bg=CORES["card"])
+            linha_erro.pack(fill="x", padx=16, pady=10)
+            tk.Label(
+                linha_erro,
+                text=f"!  Não foi possível atualizar o cockpit: {self._erro_carregamento}",
+                font=FONTES["texto_pequeno"], fg=CORES["danger"], bg=CORES["card"], anchor="w",
+                wraplength=760, justify="left",
+            ).pack(side="left", fill="x", expand=True)
+            criar_botao(linha_erro, "TENTAR NOVAMENTE", self._iniciar_carregamento, tipo="secundario", compacto=True).pack(side="right", padx=(12, 0))
 
         self._metricas(conteudo)
         self._atalhos(conteudo)
@@ -97,7 +191,8 @@ class TelaPrincipal:
             administrador=usuario.get("perfil") == "admin",
         )
         filial = self.contexto.get("filial_nome") or "Todas as filiais"
-        return f"{self.contexto['empresa_nome'].upper()}  /  {filial.upper()}  /  {perfil.upper()}"
+        empresa = str(self.contexto.get("empresa_nome") or "Contexto indisponível")
+        return f"{empresa.upper()}  /  {filial.upper()}  /  {perfil.upper()}"
 
     def _metricas(self, parent):
         grade = GradeResponsiva(parent, max_colunas=4, largura_minima=220, bg=CORES["bg"])
@@ -123,13 +218,13 @@ class TelaPrincipal:
         tk.Label(
             titulo,
             text="Ferramentas corporativas",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["text"],
             bg=CORES["card"],
         ).pack(anchor="w")
         tk.Label(
             titulo,
-            text="Serviços conectados ao backend local",
+            text="Serviços conectados ao backend corporativo",
             font=FONTES["micro"],
             fg=CORES["text_muted"],
             bg=CORES["card"],
@@ -262,7 +357,7 @@ class TelaPrincipal:
             tk.Label(
                 cab,
                 text=texto,
-                font=("Segoe UI", 9, "bold"),
+                font=("Inter", 9, "bold"),
                 fg=CORES["text_muted"],
                 bg=CORES["card_secundario"],
                 anchor="w",
@@ -291,7 +386,7 @@ class TelaPrincipal:
             tk.Label(
                 linha,
                 text="●",
-                font=("Segoe UI", 9),
+                font=("Inter", 9),
                 fg=cor,
                 bg=CORES["card"],
             ).pack(side="left", padx=(9, 7), pady=9)
@@ -327,7 +422,7 @@ class TelaPrincipal:
         card.pack(fill="x")
         interior = tk.Frame(card, bg=CORES["card"])
         interior.pack(fill="x", padx=18, pady=16)
-        criar_titulo_secao(interior, "Saúde da plataforma", "Serviços locais da aplicação.")
+        criar_titulo_secao(interior, "Saúde da plataforma", "Serviços corporativos e motor analítico.")
         tk.Label(
             interior,
             text="✓",
@@ -340,13 +435,13 @@ class TelaPrincipal:
         tk.Label(
             interior,
             text="Ambiente operacional",
-            font=("Segoe UI", 11, "bold"),
+            font=("Inter", 11, "bold"),
             fg=CORES["text"],
             bg=CORES["card"],
         ).pack()
         tk.Label(
             interior,
-            text="Core, banco local e motor analítico disponíveis.",
+            text="Core, Servidor Corporativo e motor analítico disponíveis.",
             font=FONTES["micro"],
             fg=CORES["text_sec"],
             bg=CORES["card"],
@@ -368,7 +463,7 @@ class TelaPrincipal:
             tk.Label(
                 linha,
                 text=valor,
-                font=("Segoe UI", 8, "bold"),
+                font=("Inter", 8, "bold"),
                 fg=cor,
                 bg=CORES["card"],
             ).pack(side="right")
@@ -425,7 +520,7 @@ class TelaPrincipal:
             tk.Label(
                 texto,
                 text=item.get("titulo", "Alerta"),
-                font=("Segoe UI", 8, "bold"),
+                font=("Inter", 8, "bold"),
                 fg=CORES["text"],
                 bg=CORES["card_secundario"],
             ).pack(anchor="w")

@@ -1,10 +1,11 @@
 """Administração visual do núcleo multiempresa e multifilial."""
 
+from core.versao import VERSAO_INTERFACE
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from auth.sessao import SESSAO
-from enterprise.organizacao import (
+from services.organizacao import (
     criar_centro_custo,
     criar_departamento,
     criar_empresa,
@@ -64,7 +65,7 @@ class TelaOrganizacao:
                 "compartilhados por todos os módulos."
             ),
             breadcrumb="GESTÃO  /  ORGANIZAÇÃO",
-            etiqueta="MULTIEMPRESA V9.0",
+            etiqueta=f"MULTIEMPRESA {VERSAO_INTERFACE}",
         )
 
         seletor = criar_card(conteudo)
@@ -72,7 +73,7 @@ class TelaOrganizacao:
         tk.Label(
             seletor,
             text="EMPRESA ATIVA NESTA SESSÃO",
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             fg=CORES["primary"],
             bg=CORES["card"],
         ).pack(side="left", padx=(18, 12), pady=14)
@@ -128,7 +129,7 @@ class TelaOrganizacao:
             tk.Label(
                 card,
                 text=titulo,
-                font=("Segoe UI", 9, "bold"),
+                font=("Inter", 9, "bold"),
                 fg=CORES["primary"],
                 bg=CORES["card"],
             ).pack(anchor="w", padx=16, pady=(16, 9))
@@ -139,7 +140,7 @@ class TelaOrganizacao:
                 selectbackground=CORES["primary_hover"],
                 relief="flat",
                 bd=0,
-                font=("Segoe UI", 9),
+                font=("Inter", 9),
             )
             lista.pack(fill="both", expand=True, padx=16, ipady=90)
             self.listas[chave] = lista

@@ -1,0 +1,4 @@
+V10.3.2 — Administrativo especializado
+- central de solicitações internas
+- facilities, recursos, reservas, viagens, reembolsos e manutenção
+- detecção de conflito de reservas e migração dos registros legados

@@ -1,18 +1,5 @@
-# Ativos visuais
+# Assets
 
-Os arquivos desta pasta pertencem ao front-end da Data Intelligence V8.
+A V10.2.0 removeu as imagens rasterizadas antigas do login. A identidade de acesso agora é construída vetorialmente em `interface/login.py`, o que melhora DPI, responsividade e compatibilidade com os temas escuro/claro.
 
-## Login
-
-O login utiliza dois ativos independentes:
-
-- `backgrounds/login_background_v7.png`: fundo tecnológico aplicado em toda
-  a janela e redimensionado de forma responsiva;
-- `illustrations/login_ecossistema_transparente_v8.png`: motor analítico
-  central conectado a exatamente nove nós, com canal alfa e sem fundo próprio.
-
-As composições foram criadas sem texto, logotipos ou marcas externas para
-funcionarem como extensões da identidade visual da plataforma.
-
-As telas devem carregar ativos por meio de `interface.imagens`, evitando
-caminhos absolutos ligados ao computador do desenvolvedor.
+A pasta `previews/` mantém apenas imagens de referência/documentação de módulos quando necessárias. Elas não são usadas como fundo da interface principal.

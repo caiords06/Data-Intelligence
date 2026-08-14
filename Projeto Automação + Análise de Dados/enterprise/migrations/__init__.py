@@ -27,6 +27,15 @@ MIGRACOES = (
     "017_consistencia_monetaria_aprovacoes",
     "018_caminhos_rh_portaveis",
     "019_compatibilidade_v9_legada",
+    "020_v10_3_crm_marketing",
+    "021_v10_3_1_comercial",
+    "022_v10_3_2_administrativo",
+    "023_v10_3_3_juridico",
+    "024_v10_4_analytics_inteligencia",
+    "025_v10_4_1_inteligencia_transversal",
+    "026_hardening_producao",
+    "027_v11_core_empresarial",
+    "028_v11_1_conformidade",
 )
 
 

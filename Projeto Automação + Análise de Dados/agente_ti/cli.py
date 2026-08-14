@@ -24,6 +24,7 @@ from agente_ti.windows import (
     consultar_tarefa,
     executavel_atual,
     instalar_tarefa,
+    iniciar_tarefa,
     proteger_diretorio,
     remover_tarefa,
 )
@@ -49,6 +50,9 @@ def _parser() -> argparse.ArgumentParser:
     configurar.add_argument("--allow-private-http", action="store_true", help="Permite HTTP somente para IP privado em laboratório LAN.")
     configurar.add_argument("--config", type=Path, default=caminho_config_padrao())
 
+    configurar_arquivo = sub.add_parser("configure-file", help="Provisiona o agente por arquivo JSON temporário.")
+    configurar_arquivo.add_argument("--bootstrap-file", required=True, type=Path)
+
     for nome, ajuda in (
         ("collect", "Mostra os dados locais sem realizar envio."),
         ("once", "Executa somente um heartbeat."),
@@ -64,6 +68,7 @@ def _parser() -> argparse.ArgumentParser:
     instalar.add_argument("--executable", type=Path)
     sub.add_parser("uninstall", help="Remove a tarefa de inicialização automática.")
     sub.add_parser("task-status", help="Consulta o estado da tarefa do Windows.")
+    sub.add_parser("start-task", help="Inicia imediatamente a tarefa do agente.")
     return parser
 
 
@@ -95,17 +100,48 @@ def _configurar(args) -> int:
     return 0
 
 
+
+def _configurar_por_arquivo(args) -> int:
+    dados = json.loads(Path(args.bootstrap_file).read_text(encoding="utf-8-sig"))
+    token_file = Path(str(dados.get("token_file") or ""))
+    token = token_file.read_text(encoding="utf-8-sig").strip()
+    if len(token) < 24:
+        raise ValueError("O token precisa possuir pelo menos 24 caracteres.")
+    config = criar_configuracao(
+        str(dados.get("server_url") or ""),
+        str(dados.get("patrimonio") or ""),
+        intervalo_segundos=int(dados.get("interval", 60)),
+        timeout_segundos=int(dados.get("timeout", 15)),
+        provedor_remoto=str(dados.get("provider") or "AnyDesk"),
+        agent_id=str(dados.get("agent_id") or ""),
+        permitir_http_privado=bool(dados.get("allow_private_http", False)),
+    )
+    destino = salvar_configuracao(config, caminho_config_padrao())
+    if os.name == "nt":
+        salvar_token(token, caminho_segredo_padrao(destino))
+        proteger_diretorio(destino.parent)
+    else:
+        raise OSError("O provisionamento por arquivo é destinado ao instalador Windows.")
+    print(f"Configuração criada em: {destino}")
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.comando == "configure":
             return _configurar(args)
+        if args.comando == "configure-file":
+            return _configurar_por_arquivo(args)
         if args.comando == "uninstall":
             remover_tarefa()
             print("Agente removido da inicialização automática.")
             return 0
         if args.comando == "task-status":
             print(consultar_tarefa())
+            return 0
+        if args.comando == "start-task":
+            iniciar_tarefa()
+            print("Tarefa do Agente TI iniciada.")
             return 0
 
         config = carregar_configuracao(args.config)

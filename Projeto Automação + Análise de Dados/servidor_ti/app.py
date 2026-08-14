@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import ssl
+import time
 from typing import Any
 
 from auth.banco import conectar
@@ -16,6 +17,7 @@ from enterprise.tecnologia import registrar_snapshot_agente
 from servidor_ti import VERSAO_SERVIDOR_TI
 from servidor_ti.config import ServidorTIConfig
 from servidor_ti.security import AgentAuthError, autenticar
+from core.observabilidade import RegistroSaude, novo_request_id
 
 MAX_BODY = 128 * 1024
 
@@ -72,6 +74,11 @@ def processar_heartbeat(headers, corpo: bytes, endereco_remoto: str) -> dict[str
 
 
 class TIRequestHandler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self._inicio_requisicao = time.perf_counter()
+        self._request_id = novo_request_id()
+
     server_version = "DataIntelligenceTIServer/" + VERSAO_SERVIDOR_TI
     sys_version = ""
 
@@ -82,12 +89,27 @@ class TIRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(corpo)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Request-ID", self._request_id)
+        observabilidade = getattr(self.server, "observabilidade", None)
+        if observabilidade is not None:
+            observabilidade.registrar_requisicao(int(status), (time.perf_counter() - self._inicio_requisicao) * 1000)
         self.end_headers()
         self.wfile.write(corpo)
 
     def do_GET(self):
-        if self.path.rstrip("/") in {"", "/health", "/api/v1/ti/health"}:
+        caminho = self.path.rstrip("/")
+        if caminho in {"", "/health", "/api/v1/ti/health", "/api/v1/ti/health/live"}:
             self._responder(HTTPStatus.OK, {"ok": True, "servico": "ti-agent-api", "versao": VERSAO_SERVIDOR_TI})
+            return
+        if caminho == "/api/v1/ti/health/ready":
+            try:
+                with conectar() as conexao:
+                    conexao.execute("SELECT 1").fetchone()
+                pronto = True
+            except Exception:
+                pronto = False
+            status = HTTPStatus.OK if pronto else HTTPStatus.SERVICE_UNAVAILABLE
+            self._responder(status, {"ok": pronto, "pronto": pronto, "servico": "ti-agent-api"})
             return
         self._responder(HTTPStatus.NOT_FOUND, {"erro": "Rota não encontrada."})
 
@@ -130,6 +152,10 @@ class TIRequestHandler(BaseHTTPRequestHandler):
 class TIServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observabilidade = RegistroSaude("ti-agent-api")
 
 
 def criar_servidor(config: ServidorTIConfig) -> TIServer:

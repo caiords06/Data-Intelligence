@@ -295,7 +295,7 @@ def listar_caixa(
                 WHERE m.empresa_id=? AND d.usuario_id=? AND m.rascunho=0
                   AND d.arquivada=? AND d.excluida=?
                   AND (m.assunto LIKE ? OR m.corpo LIKE ? OR u.nome LIKE ?)
-                GROUP BY m.id
+                GROUP BY m.id, u.nome, u.email_corporativo, d.lida_em, d.estrela
                 ORDER BY m.id DESC LIMIT ?
             """
             params=(empresa_id,uid,arquivada,excluida,termo,termo,termo,limite)

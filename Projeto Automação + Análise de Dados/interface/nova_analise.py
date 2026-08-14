@@ -1,4 +1,4 @@
-"""Configuração visual e aquisição de fontes de uma nova análise V9.0."""
+"""Configuração visual e aquisição de fontes de uma nova análise V9.5."""
 
 from __future__ import annotations
 
@@ -197,7 +197,7 @@ class TelaNovaAnalise:
             tk.Label(
                 bloco,
                 text=nome,
-                font=("Segoe UI", 8, "bold"),
+                font=("Inter", 8, "bold"),
                 fg=CORES["text"],
                 bg=CORES["card_secundario"],
             ).pack()
@@ -241,7 +241,7 @@ class TelaNovaAnalise:
         tk.Label(
             drop,
             text="Selecione os arquivos da análise",
-            font=("Segoe UI", 10, "bold"),
+            font=("Inter", 10, "bold"),
             fg=CORES["text"],
             bg=CORES["input"],
         ).pack()
@@ -258,7 +258,7 @@ class TelaNovaAnalise:
         tk.Label(
             topo_lista,
             text="Arquivos selecionados",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["text"],
             bg=CORES["card"],
         ).pack(side="left")
@@ -426,7 +426,7 @@ class TelaNovaAnalise:
         tk.Label(
             topo,
             text="Resumo da análise",
-            font=("Segoe UI", 12, "bold"),
+            font=("Inter", 12, "bold"),
             fg=CORES["text"],
             bg=CORES["card"],
         ).pack(side="left")
@@ -458,7 +458,7 @@ class TelaNovaAnalise:
         tk.Label(
             aviso,
             text="!  IMPORTANTE",
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             fg=CORES["warning"],
             bg=CORES["warning_soft"],
         ).pack(anchor="w", padx=12, pady=(10, 3))
@@ -511,7 +511,7 @@ class TelaNovaAnalise:
         valor = tk.Label(
             texto,
             text="—",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["text"],
             bg=CORES["card"],
             wraplength=210,

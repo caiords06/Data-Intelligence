@@ -182,7 +182,7 @@ class VNextEstabilizacaoTests(unittest.TestCase):
             self.assertIn("database/app.db", nomes)
             self.assertIn("storage/documentos/manual.txt", nomes)
             manifesto = json.loads(zf.read("manifest.json"))
-            self.assertEqual(manifesto["versao"], 2)
+            self.assertEqual(manifesto["versao"], 3)
 
     def test_sessao_epoch_revoga_sessao_em_memoria(self):
         admin, _, _ = self._ambiente()

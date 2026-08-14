@@ -6,7 +6,6 @@ from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 import json
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import random
@@ -15,9 +14,11 @@ import threading
 import time
 from typing import Any
 
+from agente_ti import VERSAO_AGENTE
 from agente_ti.collector import coletar_payload
 from agente_ti.config import AgentConfig
 from agente_ti.transport import TransportResult, enviar_heartbeat
+from core.observabilidade import configurar_logger_rotativo
 
 
 LOG_NAME = "ti-agent.log"
@@ -56,20 +57,12 @@ def _pid_ativo(pid: int) -> bool:
 def configurar_log(diretorio: str | Path) -> logging.Logger:
     pasta = Path(diretorio)
     pasta.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("data_intelligence.ti_agent")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    destino = str((pasta / LOG_NAME).resolve())
-    if not any(isinstance(h, RotatingFileHandler) and h.baseFilename == destino for h in logger.handlers):
-        handler = RotatingFileHandler(
-            destino,
-            maxBytes=2 * 1024 * 1024,
-            backupCount=4,
-            encoding="utf-8",
-        )
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-        logger.addHandler(handler)
-    return logger
+    return configurar_logger_rotativo(
+        "data_intelligence.ti_agent",
+        pasta / LOG_NAME,
+        max_bytes=2 * 1024 * 1024,
+        backups=4,
+    )
 
 
 def salvar_status(diretorio: str | Path, dados: dict[str, Any]) -> Path:
@@ -79,6 +72,26 @@ def salvar_status(diretorio: str | Path, dados: dict[str, Any]) -> Path:
     temporario.write_text(json.dumps(dados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporario, destino)
     return destino
+
+
+def atualizar_status(diretorio: str | Path, dados: dict[str, Any]) -> Path:
+    """Mescla o estado novo preservando a última telemetria útil do agente."""
+    destino = Path(diretorio) / STATUS_NAME
+    atual: dict[str, Any] = {}
+    if destino.is_file():
+        try:
+            bruto = json.loads(destino.read_text(encoding="utf-8-sig"))
+            if isinstance(bruto, dict):
+                atual = bruto
+        except (OSError, json.JSONDecodeError):
+            atual = {}
+    atual.update({
+        "pid": os.getpid(),
+        "agente_versao": VERSAO_AGENTE,
+        "atualizado_em": _agora(),
+    })
+    atual.update(dados)
+    return salvar_status(diretorio, atual)
 
 
 class InstanceLock(AbstractContextManager):
@@ -164,12 +177,12 @@ class AgentRuntime:
         lock = self.diretorio / LOCK_NAME
         with InstanceLock(lock):
             self.logger.info("Agente iniciado; patrimônio=%s", self.config.patrimonio)
-            salvar_status(self.diretorio, {"estado": "iniciando", "atualizado_em": _agora()})
+            atualizar_status(self.diretorio, {"estado": "iniciando", "iniciado_em": _agora(), "falhas_consecutivas": 0})
             while not self.parar.is_set():
                 try:
                     _payload, resposta = executar_uma_vez(self.config, token=self.token)
                     self._falhas = 0
-                    salvar_status(self.diretorio, {
+                    atualizar_status(self.diretorio, {
                         "estado": "online",
                         "ultimo_envio": _agora(),
                         "http_status": resposta.status if resposta else None,
@@ -183,7 +196,7 @@ class AgentRuntime:
                     )
                 except Exception as erro:  # o agente precisa continuar após falhas transitórias
                     self._falhas += 1
-                    salvar_status(self.diretorio, {
+                    atualizar_status(self.diretorio, {
                         "estado": "degradado",
                         "ultima_falha": _agora(),
                         "erro": str(erro)[:500],
@@ -191,5 +204,5 @@ class AgentRuntime:
                     })
                     self.logger.warning("Falha no heartbeat: %s", str(erro)[:500])
                 self.parar.wait(self._espera())
-            salvar_status(self.diretorio, {"estado": "parado", "atualizado_em": _agora()})
+            atualizar_status(self.diretorio, {"estado": "parado", "encerrado_em": _agora()})
             self.logger.info("Agente encerrado")

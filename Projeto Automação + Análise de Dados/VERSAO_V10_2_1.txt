@@ -1,0 +1,8 @@
+V10.2.1 — Auditoria visual e responsividade
+
+Marco incorporado à V10.3.0.
+- matriz de capturas dark/light;
+- resoluções 1024x680, 1366x768, 1600x900 e 1920x1080;
+- captura por tema e resolução;
+- estilos App.* preservados em ambos os temas;
+- Marketing incluído no catálogo visual especializado.

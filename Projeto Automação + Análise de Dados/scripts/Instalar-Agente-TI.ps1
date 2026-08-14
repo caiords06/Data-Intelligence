@@ -17,7 +17,10 @@ if (-not (Test-Path $OrigemExe)) {
     throw "Coloque DataIntelligenceTIAgent.exe na mesma pasta deste script."
 }
 
-$InstallDir = Join-Path $env:ProgramFiles "DataIntelligence\TIAgent"
+# Upgrade seguro: encerra o agente antigo antes de substituir o executável.
+Stop-ScheduledTask -TaskName "DataIntelligence-TIAgent" -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+$InstallDir = Join-Path $env:ProgramFiles "Data Intelligence\TIAgent"
 $DestinoExe = Join-Path $InstallDir "DataIntelligenceTIAgent.exe"
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 Copy-Item $OrigemExe $DestinoExe -Force
@@ -61,7 +64,11 @@ Write-Host "Instalando inicialização automática..."
 if ($LASTEXITCODE -ne 0) { throw "Falha ao instalar a tarefa do agente." }
 
 Write-Host "Iniciando o agente agora, sem aguardar o próximo reboot..."
-& schtasks.exe /Run /TN "DataIntelligence-TIAgent" | Out-Null
+& $DestinoExe start-task
+if ($LASTEXITCODE -ne 0) {
+    & $DestinoExe uninstall | Out-Null
+    throw "A tarefa do agente foi instalada, mas não pôde ser iniciada; a tarefa parcial foi removida."
+}
 Start-Sleep -Seconds 2
 
 Write-Host ""

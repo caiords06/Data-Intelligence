@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -118,7 +119,7 @@ def importar_conjunto(
         from enterprise.servidor_cliente import espelhar_exportacao
         espelhar_exportacao(destino, modulo="analytics", categoria="dataset")
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Não foi possível espelhar dataset importado no servidor")
     return conjunto_id
 
 
@@ -334,7 +335,7 @@ def substituir_arquivo_conjunto(conjunto_id, caminho, ator):
         from enterprise.servidor_cliente import espelhar_exportacao
         espelhar_exportacao(destino, modulo="analytics", categoria="dataset")
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Não foi possível espelhar nova versão do dataset no servidor")
 
 # V9.1: em estações Central/Cliente, as APIs transacionais permitidas acima
 # são executadas no Servidor Corporativo. No servidor/standalone permanecem locais.

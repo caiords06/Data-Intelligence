@@ -1,83 +1,45 @@
-"""Definição única da navegação contextual do Analytics.
+"""Navegação canônica da Inteligência Empresarial — V10.4.0.
 
-Todas as telas do contexto analítico usam exatamente o mesmo menu. Isso evita
-que a sidebar mude ao sair do dashboard para Explorar dados, Relatórios,
-Visualizações ou qualquer outra seção do Analytics.
+A área principal é orientada a decisão. O laboratório de arquivos continua
+existindo como capacidade secundária e os antigos placeholders de IA/MLOps
+não são expostos como funcionalidades prontas.
 """
-
 from __future__ import annotations
 
-from auth.sessao import SESSAO
 from interface.componentes import criar_sidebar
 
-
-MENU_ANALYTICS = (
-    ("visao", "⌂", "Dashboard analítico"),
-    ("nova", "+", "Nova análise"),
-    ("importacoes", "↓", "Importações"),
+MENU_INTELIGENCIA = (
+    ("visao", "▦", "Visão executiva"),
+    ("insights", "◇", "Insights"),
     ("conjuntos", "▣", "Explorar dados"),
+    ("alertas", "!", "Alertas"),
     ("relatorios", "▤", "Relatórios"),
     ("visualizacoes", "▥", "Visualizações"),
     ("agendamentos", "◷", "Agendamentos"),
-    ("alertas", "!", "Alertas analíticos"),
-    ("modelos", "◈", "Modelos"),
-    ("perfis", "◎", "Perfis de análise"),
-    ("assistente", "✦", "IA Assistente"),
 )
-
-
-MENU_GERAL_ANALYTICS = (
-    ("inicio", "⌂", "Início"),
-    ("modulos", "▦", "Módulos"),
-    ("historico", "◷", "Histórico"),
-    ("aprovacoes", "✓", "Aprovações"),
-    ("configuracoes", "⚙", "Configurações"),
+MENU_LABORATORIO = (
+    ("nova", "+", "Análise externa"),
+    ("importacoes", "↓", "Importações"),
 )
+MENU_ADMIN_ANALYTICS = (("regras", "⚙", "Regras analíticas"),)
+# Compatibilidade para testes/extensões que importam o nome histórico.
+MENU_ANALYTICS = MENU_INTELIGENCIA + MENU_LABORATORIO + MENU_ADMIN_ANALYTICS
 
+def _cmd(navegacao, chave):
+    if chave == "nova": return navegacao.get("nova")
+    callback = navegacao.get("analytics_secao")
+    return (lambda destino=chave, acao=callback: acao(destino)) if callback else None
 
-def _itens_contextuais(navegacao):
-    itens = []
-    for chave, icone, titulo in MENU_ANALYTICS:
-        if chave == "nova":
-            comando = navegacao.get("nova")
-        elif chave == "perfis":
-            comando = navegacao.get("perfis")
-        else:
-            callback = navegacao.get("analytics_secao")
-            comando = (
-                (lambda destino=chave, acao=callback: acao(destino))
-                if callback is not None
-                else None
-            )
-        itens.append((chave, icone, titulo, comando))
-    return tuple(itens)
-
-
-def _itens_gerais(navegacao):
-    itens = [
-        (chave, icone, titulo, navegacao.get(chave))
-        for chave, icone, titulo in MENU_GERAL_ANALYTICS
-    ]
-    if SESSAO.eh_admin():
-        itens.append(("usuarios", "◎", "Usuários", navegacao.get("usuarios")))
-    return tuple(itens)
-
+def _grupo(navegacao, itens):
+    return tuple((chave, icone, titulo, _cmd(navegacao, chave)) for chave, icone, titulo in itens)
 
 def grupos_sidebar_analytics(navegacao):
-    """Retorna os grupos canônicos usados por todas as páginas analíticas."""
     return (
-        ("ANALYTICS", _itens_contextuais(navegacao)),
-        ("GERAL", _itens_gerais(navegacao)),
+        ("INTELIGÊNCIA", _grupo(navegacao, MENU_INTELIGENCIA)),
+        ("LABORATÓRIO", _grupo(navegacao, MENU_LABORATORIO)),
+        ("ADMINISTRAÇÃO", _grupo(navegacao, MENU_ADMIN_ANALYTICS)),
     )
 
-
-def criar_sidebar_analytics(parent, navegacao, *, ativo, voltar):
-    """Cria a sidebar única do contexto analítico."""
-    return criar_sidebar(
-        parent,
-        navegacao,
-        ativo=ativo,
-        grupos_customizados=grupos_sidebar_analytics(navegacao),
-        rodape_texto="Voltar aos módulos",
-        rodape_comando=voltar,
-    )
+def criar_sidebar_analytics(parent,navegacao,*,ativo,voltar):
+    return criar_sidebar(parent,navegacao,ativo=ativo,grupos_customizados=grupos_sidebar_analytics(navegacao),
+                         rodape_texto="Voltar aos módulos",rodape_comando=voltar)

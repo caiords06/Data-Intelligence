@@ -1,5 +1,6 @@
 """Tela de preferências globais e segurança da conta atual."""
 
+from core.versao import VERSAO_INTERFACE
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -11,13 +12,15 @@ from configuracoes.preferencias import (
     carregar_preferencias,
     salvar_preferencias,
 )
-from enterprise.backups import criar_backup
+from services.backups import criar_backup
 from interface.componentes import (
     AreaRolavel,
     GradeResponsiva,
     criar_cabecalho,
     criar_sidebar,
 )
+from interface.gerenciador_tema import aplicar_tema
+from interface.icones import icone
 from interface.tema import CORES, LAYOUT, configurar_estilos_ttk
 
 CATEGORIAS_TELA = {
@@ -78,7 +81,7 @@ class TelaConfiguracoesApp:
                 "Estas opções não alteram o motor da análise atual."
             ),
             breadcrumb="GESTÃO  /  CONFIGURAÇÕES",
-            etiqueta="PREFERÊNCIAS V9.0",
+            etiqueta=f"PREFERÊNCIAS {VERSAO_INTERFACE}",
         )
 
         grade = GradeResponsiva(
@@ -92,6 +95,11 @@ class TelaConfiguracoesApp:
         direita = self._card(grade, "FONTES E SEGURANÇA")
         grade.adicionar(esquerda)
         grade.adicionar(direita)
+
+        self.tema_var = tk.StringVar(
+            value="Escuro tecnológico" if self.preferencias.get("tema_interface") == "escuro" else "Claro suave"
+        )
+        self._campo_tema(esquerda)
 
         self.delay_var = tk.IntVar(value=self.preferencias["atraso_minimo_segundos"])
         self.timeout_var = tk.IntVar(value=self.preferencias["tempo_sessao_minutos"])
@@ -117,7 +125,7 @@ class TelaConfiguracoesApp:
             direita,
             text="Confirmar antes de excluir um item do histórico",
             variable=self.confirmar_var,
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text"],
             bg=CORES["card"],
             selectcolor=CORES["input"],
@@ -128,7 +136,7 @@ class TelaConfiguracoesApp:
             direita,
             text="ALTERAR MINHA SENHA",
             command=self.alterar_senha,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["card_secundario"],
             fg=CORES["text"],
             activebackground=CORES["card_hover"],
@@ -142,7 +150,7 @@ class TelaConfiguracoesApp:
                 direita,
                 text="ESTRUTURA ORGANIZACIONAL",
                 command=self.navegacao.get("organizacao"),
-                font=("Segoe UI", 9, "bold"),
+                font=("Inter", 9, "bold"),
                 bg=CORES["card_secundario"],
                 fg=CORES["text"],
                 activebackground=CORES["card_hover"],
@@ -155,7 +163,7 @@ class TelaConfiguracoesApp:
                 direita,
                 text="CRIAR BACKUP VERIFICADO",
                 command=self.criar_backup,
-                font=("Segoe UI", 9, "bold"),
+                font=("Inter", 9, "bold"),
                 bg=CORES["card_secundario"],
                 fg=CORES["text"],
                 activebackground=CORES["card_hover"],
@@ -169,7 +177,7 @@ class TelaConfiguracoesApp:
                     direita,
                     text="ARQUIVOS DO SERVIDOR CORPORATIVO",
                     command=self.abrir_servidor_corporativo,
-                    font=("Segoe UI", 9, "bold"),
+                    font=("Inter", 9, "bold"),
                     bg=CORES["primary"],
                     fg="#FFFFFF",
                     activebackground=CORES["primary_hover"],
@@ -183,7 +191,7 @@ class TelaConfiguracoesApp:
             rodape,
             text="SALVAR CONFIGURAÇÕES",
             command=self.salvar,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["primary"],
             fg="#FFFFFF",
             activebackground=CORES["primary_hover"],
@@ -196,7 +204,7 @@ class TelaConfiguracoesApp:
             rodape,
             text="RESTAURAR PADRÕES",
             command=self.restaurar,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["card_secundario"],
             fg=CORES["text"],
             activebackground=CORES["card_hover"],
@@ -208,7 +216,7 @@ class TelaConfiguracoesApp:
         self.status = tk.Label(
             rodape,
             text="",
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["success"],
             bg=CORES["bg"],
         )
@@ -228,7 +236,7 @@ class TelaConfiguracoesApp:
         tk.Label(
             card,
             text=titulo,
-            font=("Segoe UI", 10, "bold"),
+            font=("Inter", 10, "bold"),
             fg=CORES["primary"],
             bg=CORES["card"],
         ).pack(anchor="w", padx=22, pady=(22, 16))
@@ -238,10 +246,30 @@ class TelaConfiguracoesApp:
         tk.Label(
             parent,
             text=texto,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["text_sec"],
             bg=CORES["card"],
         ).pack(anchor="w", padx=22, pady=(10, 5))
+
+    def _campo_tema(self, parent):
+        self._rotulo_campo(parent, "Aparência")
+        linha = tk.Frame(parent, bg=CORES["card"])
+        linha.pack(fill="x", padx=22, pady=(0, 4))
+        opcoes = ("Escuro tecnológico", "Claro suave")
+        ttk.Combobox(
+            linha, textvariable=self.tema_var, values=opcoes, state="readonly",
+            font=("Inter", 10), style="App.TCombobox",
+        ).pack(side="left", fill="x", expand=True, ipady=4)
+        tk.Label(
+            linha, text=icone("tema_escuro") + " / " + icone("tema_claro"),
+            font=("Segoe UI Symbol", 11), fg=CORES["primary"], bg=CORES["card"],
+        ).pack(side="right", padx=(10, 2))
+        tk.Label(
+            parent,
+            text="O tema é salvo no seu perfil corporativo e aplicado em todas as telas.",
+            font=("Inter", 8), fg=CORES["text_muted"], bg=CORES["card"],
+            justify="left", wraplength=330,
+        ).pack(anchor="w", padx=22, pady=(2, 8))
 
     def _campo_spin(self, parent, texto, variavel, minimo, maximo):
         self._rotulo_campo(parent, texto)
@@ -250,7 +278,7 @@ class TelaConfiguracoesApp:
             from_=minimo,
             to=maximo,
             textvariable=variavel,
-            font=("Segoe UI", 10),
+            font=("Inter", 10),
             bg=CORES["input"],
             fg=CORES["text"],
             buttonbackground=CORES["card_secundario"],
@@ -266,8 +294,8 @@ class TelaConfiguracoesApp:
             textvariable=variavel,
             values=list(valores),
             state="readonly",
-            font=("Segoe UI", 10),
-            style="Dark.TCombobox",
+            font=("Inter", 10),
+            style="App.TCombobox",
         ).pack(fill="x", padx=22, ipady=4)
 
     def _campo_texto(self, parent, texto, variavel):
@@ -275,7 +303,7 @@ class TelaConfiguracoesApp:
         tk.Entry(
             parent,
             textvariable=variavel,
-            font=("Segoe UI", 10),
+            font=("Inter", 10),
             bg=CORES["input"],
             fg=CORES["text"],
             insertbackground=CORES["primary"],
@@ -290,7 +318,7 @@ class TelaConfiguracoesApp:
         tk.Entry(
             linha,
             textvariable=self.pasta_var,
-            font=("Segoe UI", 10),
+            font=("Inter", 10),
             bg=CORES["input"],
             fg=CORES["text"],
             insertbackground=CORES["primary"],
@@ -301,7 +329,7 @@ class TelaConfiguracoesApp:
             linha,
             text="…",
             command=self.selecionar_pasta,
-            font=("Segoe UI", 11, "bold"),
+            font=("Inter", 11, "bold"),
             bg=CORES["card_secundario"],
             fg=CORES["text"],
             relief="flat",
@@ -318,25 +346,40 @@ class TelaConfiguracoesApp:
             self.pasta_var.set(pasta)
 
     def criar_backup(self):
-        destino = filedialog.askdirectory(
-            title="Selecionar pasta do backup",
-            initialdir=self.pasta_var.get() or None,
-        )
-        if not destino:
-            return
+        remoto = usa_servidor_remoto()
+        destino = None
+        if not remoto:
+            destino = filedialog.askdirectory(
+                title="Selecionar pasta do backup",
+                initialdir=self.pasta_var.get() or None,
+            )
+            if not destino:
+                return
         try:
             resultado = criar_backup(SESSAO.usuario, destino)
         except (PermissionError, OSError, RuntimeError, ValueError) as erro:
             messagebox.showerror("Backup", str(erro), parent=self.root)
             return
-        messagebox.showinfo(
-            "Backup concluído",
-            (
+
+        if remoto:
+            tamanho = int(resultado.get("tamanho_bytes") or 0)
+            tamanho_texto = (
+                f"{tamanho / 1024 / 1024:.2f} MB"
+                if tamanho >= 1024 * 1024
+                else f"{tamanho / 1024:.1f} KB"
+            )
+            mensagem = (
+                "O backup foi criado e verificado no Servidor Corporativo.\n\n"
+                f"Tamanho: {tamanho_texto}\n"
+                f"SHA-256: {resultado.get('hash_sha256', '—')}\n\n"
+                "Use ‘Arquivos do Servidor Corporativo’ para consultar os backups centrais."
+            )
+        else:
+            mensagem = (
                 "O backup foi criado e passou pela verificação de integridade.\n\n"
                 f"Arquivo: {resultado['arquivo']}"
-            ),
-            parent=self.root,
-        )
+            )
+        messagebox.showinfo("Backup concluído", mensagem, parent=self.root)
 
     def abrir_servidor_corporativo(self):
         try:
@@ -356,12 +399,21 @@ class TelaConfiguracoesApp:
                     "url_validacao": self.url_var.get(),
                     "tempo_sessao_minutos": self.timeout_var.get(),
                     "confirmar_exclusao_historico": self.confirmar_var.get(),
+                    "tema_interface": "escuro" if self.tema_var.get() == "Escuro tecnológico" else "claro",
                 }
             )
         except (KeyError, TypeError, ValueError) as erro:
             self.status.configure(text=str(erro), fg=CORES["danger"])
             return
         self.preferencias = salvas
+        tema_anterior = "claro" if self.tema_var.get() == "Claro suave" else "escuro"
+        aplicar_tema(tema_anterior, self.root)
+        # Recria a tela porque widgets Tk clássicos capturam as cores no momento
+        # da construção. O roteador garante uma troca limpa e sem artefatos.
+        callback = self.navegacao.get("configuracoes")
+        if callable(callback):
+            callback()
+            return
         self.status.configure(text="Configurações salvas.", fg=CORES["success"])
 
     def restaurar(self):
@@ -373,6 +425,7 @@ class TelaConfiguracoesApp:
         self.pasta_var.set(self.preferencias["pasta_padrao"])
         self.url_var.set(self.preferencias["url_validacao"])
         self.confirmar_var.set(self.preferencias["confirmar_exclusao_historico"])
+        self.tema_var.set("Escuro tecnológico" if self.preferencias.get("tema_interface") == "escuro" else "Claro suave")
         self.status.configure(text="Padrões carregados. Clique em salvar.", fg=CORES["warning"])
 
     def alterar_senha(self):

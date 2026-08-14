@@ -1,8 +1,9 @@
 """Resolução de caminhos para desenvolvimento e executáveis PyInstaller.
 
 Recursos empacotados são lidos do bundle; dados persistentes nunca são gravados
-na pasta temporária do PyInstaller. Em builds Windows, o banco e arquivos gerados
-ficam em ProgramData, salvo quando DATA_INTELLIGENCE_DATA_DIR for definido.
+na pasta temporária do PyInstaller. Dados corporativos pertencem ao servidor ou
+ao diretório protegido em ProgramData. Estado estritamente local da interface
+(logs do desktop e preferência visual) pertence ao perfil do usuário corrente.
 """
 
 from __future__ import annotations
@@ -39,6 +40,22 @@ def pasta_dados() -> Path:
     return raiz_projeto() / "storage"
 
 
+def pasta_estado_usuario() -> Path:
+    """Diretório gravável para estado local e não corporativo da estação."""
+    override = str(os.environ.get("DATA_INTELLIGENCE_USER_DATA_DIR", "")).strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return base / "DataIntelligence" / "Platform"
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    return base / "data-intelligence-platform"
+
+
+def pasta_logs_desktop() -> Path:
+    return pasta_estado_usuario() / "logs"
+
+
 def caminho_recurso(*partes: str | Path) -> Path:
     return raiz_recursos().joinpath(*map(Path, partes))
 
@@ -48,5 +65,7 @@ __all__ = [
     "raiz_projeto",
     "raiz_recursos",
     "pasta_dados",
+    "pasta_estado_usuario",
+    "pasta_logs_desktop",
     "caminho_recurso",
 ]

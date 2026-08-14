@@ -4,13 +4,13 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from auth.sessao import SESSAO
-from enterprise.catalogo import MODULOS
-from enterprise.central import (
+from services.catalogo import MODULOS
+from services.central import (
     decidir_aprovacao,
     listar_aprovacoes,
     remover_aprovacao_da_fila,
 )
-from enterprise.contexto import tem_permissao
+from services.contexto import tem_permissao
 from interface.componentes import (
     AreaRolavel, criar_botao, criar_cabecalho, criar_card,
     criar_estado_vazio, criar_sidebar,
@@ -133,7 +133,7 @@ class TelaAprovacoes:
         self.status = tk.Label(
             rodape,
             text="",
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text_sec"],
             bg=CORES["bg"],
         )

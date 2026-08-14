@@ -1,0 +1,13 @@
+DATA INTELLIGENCE ENTERPRISE PLATFORM — V10.2.0
+
+Release: Design System e identidade visual
+
+Principais mudanças:
+- Design System com tokens semânticos e paletas intercambiáveis.
+- Tema Escuro tecnológico e tema Claro suave.
+- Preferência visual persistida no perfil corporativo do usuário.
+- Login redesenhado com identidade vetorial própria, sem fotografias.
+- Vocabulário central de ícones profissionais.
+- Estilos ttk canônicos App.* com aliases Dark.* para compatibilidade.
+- Troca de tema segura por reconstrução da tela atual.
+- Base Server First/PostgreSQL preservada.

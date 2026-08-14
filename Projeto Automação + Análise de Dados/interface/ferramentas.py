@@ -1,6 +1,7 @@
 """Central funcional de tarefas, documentos, automações e governança V8."""
 
 from __future__ import annotations
+from core.versao import VERSAO_INTERFACE
 
 import json
 from pathlib import Path
@@ -8,10 +9,11 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
-from auth.banco import listar_usuarios
+from auth.autenticacao import obter_usuarios
 from auth.sessao import SESSAO
-from enterprise.catalogo import MODULOS
-from enterprise.ferramentas import (
+from interface.armazenamento_servidor import mensagem_arquivo_gerado
+from services.catalogo import MODULOS
+from services.ferramentas import (
     arquivar_documento,
     arquivar_tarefa,
     atualizar_status_tarefa,
@@ -26,13 +28,13 @@ from enterprise.ferramentas import (
     registrar_uso_ferramenta,
     verificar_documento,
 )
-from enterprise.integracoes import (
+from services.integracoes import (
     PROVEDORES_SUPORTADOS,
     definir_integracao_ativa,
     listar_integracoes,
     registrar_integracao,
 )
-from enterprise.workflows import (
+from services.workflows import (
     criar_workflow,
     definir_workflow_ativo,
     listar_workflows,
@@ -156,7 +158,7 @@ class TelaFerramentaCorporativa:
             self.config["subtitulo"],
             acao=acoes,
             breadcrumb=f"CENTRAL DA APLICAÇÃO  /  {self.config['titulo'].upper()}",
-            etiqueta="FUNCIONAL V9.0",
+            etiqueta=f"FUNCIONAL {VERSAO_INTERFACE}",
         )
         self._criar_tabela(conteudo)
         self.carregar()
@@ -220,7 +222,7 @@ class TelaFerramentaCorporativa:
         tk.Label(
             topo,
             text="REGISTROS DO CONTEXTO ATUAL",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["primary"],
             bg=CORES["card"],
         ).pack(side="left")
@@ -466,7 +468,7 @@ class TelaFerramentaCorporativa:
             tk.Label(
                 grupo,
                 text=rotulo.upper(),
-                font=("Segoe UI", 8, "bold"),
+                font=("Inter", 8, "bold"),
                 fg=CORES["text_sec"],
                 bg=CORES["card"],
             ).pack(anchor="w", pady=(0, 5))
@@ -529,7 +531,7 @@ class TelaFerramentaCorporativa:
         ).pack(side="right", padx=(0, 8))
 
     def _modulos_autorizados(self):
-        from enterprise.contexto import listar_modulos_permitidos
+        from services.contexto import listar_modulos_permitidos
 
         return tuple(
             MODULOS[chave]["nome"]
@@ -545,7 +547,7 @@ class TelaFerramentaCorporativa:
         )
 
     def _nova_tarefa(self):
-        usuarios = [item for item in listar_usuarios() if item["ativo"]]
+        usuarios = [item for item in obter_usuarios(SESSAO.usuario) if item["ativo"]]
         nomes = ("Não atribuído", *(item["nome"] for item in usuarios))
 
         def salvar(dados):
@@ -662,11 +664,13 @@ class TelaFerramentaCorporativa:
                 dados["formato"],
                 SESSAO.usuario,
             )
-            messagebox.showinfo(
-                "Relatório concluído",
-                f"{resultado['registros']} registro(s) exportado(s).\n\n{resultado['arquivo']}",
-                parent=self.root,
-            )
+            remoto = isinstance(resultado, dict) and resultado.get("armazenamento") == "servidor_corporativo"
+            nome = resultado.get("nome", "relatorio") if isinstance(resultado, dict) else "relatorio"
+            registros = resultado.get("registros") if isinstance(resultado, dict) else None
+            detalhe = mensagem_arquivo_gerado(resultado, remoto=remoto, nome=nome)
+            if registros is not None:
+                detalhe = f"{registros} registro(s) exportado(s).\n\n{detalhe}"
+            messagebox.showinfo("Relatório concluído", detalhe, parent=self.root)
 
         self._dialogo(
             "Gerar relatório",

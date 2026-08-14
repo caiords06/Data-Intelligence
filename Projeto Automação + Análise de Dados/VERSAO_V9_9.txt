@@ -1,0 +1,4 @@
+Data Intelligence Enterprise Platform
+Versão: 9.9.0
+Release: V9.9
+Foco: robustez operacional, ciclo de vida, observabilidade e health checks.

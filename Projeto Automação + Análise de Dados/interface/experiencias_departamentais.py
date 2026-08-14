@@ -9,11 +9,12 @@ from __future__ import annotations
 import tkinter as tk
 
 from auth.sessao import SESSAO
-from enterprise.catalogo import obter_modulo
-from enterprise.contexto import tem_permissao
-from enterprise.modulos import calcular_resumo_modulo
+from services.catalogo import obter_modulo
+from services.contexto import tem_permissao
+from services.modulos import calcular_resumo_modulo
 from interface.componentes import AreaRolavel, criar_botao, criar_cabecalho, criar_card, criar_sidebar
 from interface.configuracao_modulos_ui import PAINEIS_MODULOS
+from interface.navegacao_modulos import criar_sidebar_modulo
 from interface.tema import CORES, LAYOUT, configurar_estilos_ttk
 
 
@@ -128,18 +129,13 @@ class TelaExperienciaDepartamental:
 
     def _criar(self):
         configurar_estilos_ttk(self.root)
-        menu = []
-        for chave, icone, titulo in PAINEIS_MODULOS[self.modulo]["menu"]:
-            menu.append((chave, icone, titulo, lambda d=chave: self._ir(d)))
-        menu.append(("correio", "✉", "Correio interno", lambda: self._ir("correio")))
-        criar_sidebar(
+        criar_sidebar_modulo(
             self.container,
             self.navegacao,
+            modulo=self.modulo,
+            titulo=self.modulo_config["nome"].upper(),
             ativo="visao",
-            itens_customizados=tuple(menu),
-            titulo_customizado=self.modulo_config["nome"].upper(),
-            rodape_texto="Voltar aos módulos",
-            rodape_comando=self.navegacao.get("modulos"),
+            itens_menu=PAINEIS_MODULOS[self.modulo]["menu"],
         )
         viewport = AreaRolavel(self.container)
         viewport.pack(side="left", fill="both", expand=True, padx=LAYOUT["conteudo_padx"], pady=(22, 20))
@@ -170,13 +166,13 @@ class TelaExperienciaDepartamental:
             card = criar_card(grade)
             card.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 6, 0 if i == 3 else 6))
             tk.Frame(card, bg=self.cor, height=3).pack(fill="x")
-            tk.Label(card, text=titulo, bg=CORES["card"], fg=CORES["text_sec"], font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=14, pady=(12, 5))
-            tk.Label(card, text=_formatar(valor, tipo), bg=CORES["card"], fg=CORES["text"], font=("Segoe UI", 18, "bold")).pack(anchor="w", padx=14, pady=(0, 13))
+            tk.Label(card, text=titulo, bg=CORES["card"], fg=CORES["text_sec"], font=("Inter", 8, "bold")).pack(anchor="w", padx=14, pady=(12, 5))
+            tk.Label(card, text=_formatar(valor, tipo), bg=CORES["card"], fg=CORES["text"], font=("Inter", 18, "bold")).pack(anchor="w", padx=14, pady=(0, 13))
 
     def _fluxo(self, parent):
         card = criar_card(parent)
         card.pack(fill="x", pady=(0, 14))
-        tk.Label(card, text=self.config["metafora"], bg=CORES["card"], fg=self.cor, font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 10))
+        tk.Label(card, text=self.config["metafora"], bg=CORES["card"], fg=self.cor, font=("Inter", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 10))
         faixa = tk.Frame(card, bg=CORES["card"])
         faixa.pack(fill="x", padx=18, pady=(0, 18))
         for i, (destino, titulo) in enumerate(self.config["etapas"]):
@@ -185,7 +181,7 @@ class TelaExperienciaDepartamental:
                 faixa, text=f"{i+1:02d}\n{titulo}", command=lambda d=destino: self._ir(d),
                 bg=CORES["input"], fg=CORES["text"], activebackground=CORES["card_hover"],
                 activeforeground=CORES["text"], relief="flat", bd=0, cursor="hand2",
-                font=("Segoe UI", 9, "bold"), padx=10, pady=14,
+                font=("Inter", 9, "bold"), padx=10, pady=14,
             )
             bloco.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 4, 0 if i == len(self.config["etapas"])-1 else 4))
 
@@ -197,22 +193,22 @@ class TelaExperienciaDepartamental:
 
         acoes = criar_card(linha)
         acoes.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
-        tk.Label(acoes, text="AÇÕES DE TRABALHO", bg=CORES["card"], fg=CORES["text_sec"], font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
+        tk.Label(acoes, text="AÇÕES DE TRABALHO", bg=CORES["card"], fg=CORES["text_sec"], font=("Inter", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
         for texto, destino in self.config["atalhos"]:
             bot = tk.Button(
                 acoes, text=texto, command=lambda d=destino: self._ir(d), anchor="w",
                 bg=CORES["input"], fg=CORES["text"], activebackground=CORES["card_hover"],
                 activeforeground=CORES["text"], relief="flat", bd=0, cursor="hand2",
-                font=("Segoe UI", 9, "bold"), padx=14, pady=10,
+                font=("Inter", 9, "bold"), padx=14, pady=10,
             )
             bot.pack(fill="x", padx=18, pady=4)
         tk.Frame(acoes, bg=CORES["card"], height=12).pack()
 
         contexto = criar_card(linha)
         contexto.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
-        tk.Label(contexto, text=self.config["bloco"].upper(), bg=CORES["card"], fg=self.cor, font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
+        tk.Label(contexto, text=self.config["bloco"].upper(), bg=CORES["card"], fg=self.cor, font=("Inter", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
         tk.Label(
             contexto, text=self.config["mensagem"], bg=CORES["card"], fg=CORES["text_sec"],
-            font=("Segoe UI", 9), justify="left", wraplength=350,
+            font=("Inter", 9), justify="left", wraplength=350,
         ).pack(anchor="w", padx=18, pady=(0, 14))
         criar_botao(contexto, "ABRIR CORREIO DO MÓDULO", lambda: self._ir("correio"), tipo="secundario", compacto=True).pack(anchor="w", padx=18, pady=(0, 18))

@@ -1,0 +1,6 @@
+V10.5.0 — API, integrações e arquitetura Web-Ready
+- UI utiliza services/ e não importa enterprise.* diretamente.
+- API REST /api/v1 com contratos explícitos, paginação e erros consistentes.
+- Registro de providers de integração preparado para Microsoft, Google, SMTP e HTTP/Webhook.
+- RPC permanece compatível com o desktop.
+- Auditoria estática de camadas incorporada ao projeto.

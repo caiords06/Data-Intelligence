@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from auth.sessao import SESSAO
-from enterprise.nos_plataforma import alterar_status_no, cadastrar_no, listar_nos
+from services.nos_plataforma import alterar_status_no, cadastrar_no, listar_nos
 from interface.componentes import AreaRolavel, criar_botao, criar_cabecalho, criar_card, criar_sidebar
 from interface.tema import CORES, LAYOUT, configurar_estilos_ttk
 
@@ -31,7 +31,7 @@ class TelaNosPlataforma:
                         "Cadastre o servidor central, computadores administrativos e agentes autorizados.",
                         breadcrumb="GESTÃO  /  INFRAESTRUTURA", etiqueta="OPERAÇÃO DISTRIBUÍDA")
         topo = criar_card(conteudo); topo.pack(fill="x", pady=(0, 14))
-        tk.Label(topo, text="TOPOLOGIA AUTORIZADA", font=("Segoe UI", 9, "bold"),
+        tk.Label(topo, text="TOPOLOGIA AUTORIZADA", font=("Inter", 9, "bold"),
                  fg=CORES["primary"], bg=CORES["card"]).pack(side="left", padx=18, pady=16)
         criar_botao(topo, "+ CADASTRAR NÓ", self.novo).pack(side="right", padx=14, pady=8)
         criar_botao(topo, "ATUALIZAR", self.carregar, tipo="secundario").pack(side="right", pady=8)
@@ -52,7 +52,7 @@ class TelaNosPlataforma:
         criar_botao(acoes, "ATIVAR", lambda: self.alterar("Ativo"), tipo="secundario").pack(side="left")
         criar_botao(acoes, "BLOQUEAR", lambda: self.alterar("Bloqueado"), tipo="secundario").pack(side="left", padx=8)
         criar_botao(acoes, "REVOGAR", lambda: self.alterar("Revogado"), tipo="perigo").pack(side="left")
-        self.status = tk.Label(acoes, text="", font=("Segoe UI", 9), fg=CORES["text_sec"], bg=CORES["bg"])
+        self.status = tk.Label(acoes, text="", font=("Inter", 9), fg=CORES["text_sec"], bg=CORES["bg"])
         self.status.pack(side="right")
 
     def carregar(self):

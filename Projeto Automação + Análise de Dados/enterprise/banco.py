@@ -1,13 +1,19 @@
-"""Schema empresarial V5.1 sobre o mesmo SQLite local autenticado."""
+"""Bootstrap do schema empresarial; PostgreSQL é canônico em produção."""
 
 from __future__ import annotations
 
-from auth.banco import conectar
+from auth.banco import conectar, backend_banco
 from enterprise.migrations import aplicar_migracoes
 
 
 def inicializar_enterprise() -> None:
     """Cria o núcleo multiempresa e os registros operacionais dos módulos."""
+    if backend_banco() == "postgresql":
+        from enterprise.postgresql.bootstrap import inicializar_schema_postgresql
+        inicializar_schema_postgresql()
+        from enterprise.core_v11.provisionamento import provisionar_empresas_existentes
+        provisionar_empresas_existentes()
+        return
     with conectar() as conexao:
         conexao.execute("PRAGMA foreign_keys = ON")
         conexao.executescript(
@@ -412,6 +418,8 @@ def inicializar_enterprise() -> None:
         _criar_estrutura_padrao(conexao, empresa_id)
         _aplicar_migracoes_v5_1(conexao)
         aplicar_migracoes(conexao)
+    from enterprise.core_v11.provisionamento import provisionar_empresas_existentes
+    provisionar_empresas_existentes()
 
 
 def _aplicar_migracoes_v5_1(conexao) -> None:

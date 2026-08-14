@@ -8,7 +8,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from auth.sessao import SESSAO
-from enterprise.compras import (
+from services.departamentos.compras import (
     ACOES_COMPRAS,
     adicionar_aditivo,
     adicionar_comentario,
@@ -52,7 +52,7 @@ from enterprise.compras import (
     salvar_regra_aprovacao,
     tem_permissao_compras,
 )
-from enterprise.contexto import tem_permissao
+from services.contexto import tem_permissao
 from interface.componentes import (
     AreaRolavel,
     GradeResponsiva,
@@ -67,6 +67,7 @@ from interface.componentes import (
     preparar_janela_secundaria,
 )
 from interface.grade_editavel import EditorGrade
+from interface.navegacao_modulos import criar_sidebar_modulo
 from interface.tema import (
     CORES,
     FONTES,
@@ -170,7 +171,10 @@ def _formatar(valor, campo=""):
     return str(valor)
 
 
-class TelaCompras:
+from interface.compras_views import ComprasViewsMixin
+from interface.compras_acoes import ComprasAcoesMixin
+
+class TelaCompras(ComprasViewsMixin, ComprasAcoesMixin):
     def __init__(self, root, navegacao, secao="visao"):
         self.root = root
         self.navegacao = navegacao
@@ -186,19 +190,13 @@ class TelaCompras:
 
     def _criar_interface(self):
         configurar_estilos_ttk(self.root)
-        grupos = [
-            (grupo, tuple((chave, icone, titulo, lambda destino=chave: self.abrir_secao(destino)) for chave, icone, titulo in itens))
-            for grupo, itens in GRUPOS_MENU
-        ]
-        grupos.append(("COLABORAÇÃO", (("correio", "✉", "Correio interno", lambda: self.navegacao["correio"]("compras")),)))
-        criar_sidebar(
+        criar_sidebar_modulo(
             self.container,
             self.navegacao,
+            modulo="compras",
+            titulo="COMPRAS",
             ativo=self.secao,
-            grupos_customizados=tuple(grupos),
-            titulo_customizado="COMPRAS",
-            rodape_texto="Voltar aos módulos",
-            rodape_comando=self.navegacao.get("modulos"),
+            grupos_menu=GRUPOS_MENU,
             grupos_recolhiveis=True,
         )
         viewport = AreaRolavel(self.container)
@@ -213,6 +211,10 @@ class TelaCompras:
         renderizadores.get(self.secao, self._secao_operacional)()
 
     def abrir_secao(self, secao):
+        callback = self.navegacao.get("secao_modulo")
+        if callable(callback):
+            callback("compras", secao)
+            return
         self.container.destroy()
         TelaCompras(self.root, self.navegacao, secao=secao)
 
@@ -242,927 +244,54 @@ class TelaCompras:
             etiqueta="PROCUREMENT 2.0",
         )
 
-    def _visao(self):
-        gerar_alertas_compras(SESSAO.usuario)
-        self._cabecalho("Compras e suprimentos", "Central operacional do ciclo completo de aquisições, fornecedores, entregas e contratos.")
-        resumo = resumo_compras(SESSAO.usuario)
-        grade = GradeResponsiva(self.conteudo, max_colunas=4, largura_minima=220, gap=9, bg=CORES["bg"])
-        grade.pack(fill="x")
-        metricas = (
-            ("SOLICITAÇÕES ABERTAS", resumo["solicitacoes_abertas"], "▣", f"{resumo['urgentes']} urgente(s)"),
-            ("AGUARDANDO APROVAÇÃO", resumo["aguardando_aprovacao"], "✓", "Decisão humana pendente"),
-            ("COTAÇÕES ABERTAS", resumo["cotacoes_abertas"], "≡", "Em concorrência ou negociação"),
-            ("PEDIDOS EM ABERTO", resumo["pedidos_abertos"], "▤", f"{resumo['entregas_atrasadas']} entrega(s) atrasada(s)"),
-            ("VALOR EM PEDIDOS", _moeda(resumo["valor_pedidos_centavos"]), "$", "Compras não canceladas"),
-            ("SAVING NEGOCIADO", _moeda(resumo["saving_centavos"]), "↓", "Referência menos valor escolhido"),
-            ("DIVERGÊNCIAS", resumo["divergencias"], "!", "Recebimentos a tratar"),
-            ("CONTRATOS VENCENDO", resumo["contratos_vencendo"], "◷", "Próximos 30 dias"),
-        )
-        for titulo, valor, icone, detalhe in metricas:
-            grade.adicionar(criar_metrica(grade, titulo, valor, icone=icone, cor=COR_COMPRAS, detalhe=detalhe))
-        self._atalhos()
-        self._pipeline(resumo)
-        self._fila_trabalho()
 
-    def _atalhos(self):
-        card = criar_card(self.conteudo)
-        card.pack(fill="x", pady=(13, 0))
-        interior = tk.Frame(card, bg=CORES["card"])
-        interior.pack(fill="x", padx=17, pady=15)
-        criar_titulo_secao(interior, "Acesso rápido", "Atalhos para as operações mais recorrentes de Procurement.")
-        grade = GradeResponsiva(interior, max_colunas=5, largura_minima=180, gap=8, bg=CORES["card"])
-        grade.pack(fill="x")
-        atalhos = (
-            ("+", "Nova solicitação", "Necessidade, justificativa e itens.", self._nova_solicitacao),
-            ("≡", "Criar cotação", "Convide fornecedores e compare.", self._nova_cotacao),
-            ("↓", "Registrar recebimento", "Conferência parcial e divergência.", self._novo_recebimento),
-            ("◇", "Novo fornecedor", "Cadastro central e homologação.", self._novo_fornecedor),
-            ("≠", "Comparar propostas", "Mapa de preço, prazo e score.", lambda: self.abrir_secao("comparativo")),
-        )
-        for icone, titulo, detalhe, comando in atalhos:
-            quadro = criar_card(grade, fundo=CORES["card_secundario"])
-            tk.Label(quadro, text=icone, font=("Segoe UI Symbol", 18, "bold"), fg=COR_COMPRAS, bg=CORES["card_secundario"]).pack(anchor="w", padx=14, pady=(13, 5))
-            tk.Label(quadro, text=titulo, font=FONTES["subtitulo"], fg=CORES["text"], bg=CORES["card_secundario"]).pack(anchor="w", padx=14)
-            tk.Label(quadro, text=detalhe, font=FONTES["micro"], fg=CORES["text_sec"], bg=CORES["card_secundario"], wraplength=180, justify="left").pack(anchor="w", padx=14, pady=(5, 10))
-            criar_botao(quadro, "ABRIR  →", comando, tipo="fantasma", compacto=True).pack(anchor="w", padx=14, pady=(0, 13))
-            grade.adicionar(quadro)
 
-    def _pipeline(self, resumo):
-        card = criar_card(self.conteudo)
-        card.pack(fill="x", pady=(13, 0))
-        interior = tk.Frame(card, bg=CORES["card"])
-        interior.pack(fill="x", padx=17, pady=15)
-        criar_titulo_secao(interior, "Ciclo de suprimentos", "Cada etapa abre a fila correspondente do processo.")
-        grade = GradeResponsiva(interior, max_colunas=6, largura_minima=150, gap=6, bg=CORES["card"])
-        grade.pack(fill="x")
-        etapas = (
-            ("Solicitação", resumo["solicitacoes_abertas"], "solicitacoes"),
-            ("Aprovação", resumo["aguardando_aprovacao"], "aprovacoes"),
-            ("Cotação", resumo["cotacoes_abertas"], "cotacoes"),
-            ("Pedido", resumo["pedidos_abertos"], "pedidos"),
-            ("Recebimento", resumo["divergencias"], "recebimentos"),
-            ("Financeiro", "→", "recebimentos"),
-        )
-        for etapa, quantidade, secao in etapas:
-            quadro = criar_card(grade, fundo=CORES["input"])
-            tk.Frame(quadro, bg=COR_COMPRAS, height=3).pack(fill="x")
-            tk.Label(quadro, text=etapa.upper(), font=("Segoe UI", 8, "bold"), fg=CORES["text_sec"], bg=CORES["input"]).pack(anchor="w", padx=12, pady=(12, 6))
-            tk.Label(quadro, text=str(quantidade), font=FONTES["titulo"], fg=CORES["text"], bg=CORES["input"]).pack(anchor="w", padx=12)
-            criar_botao(quadro, "VER ETAPA", lambda alvo=secao: self.abrir_secao(alvo), tipo="fantasma", compacto=True).pack(anchor="w", padx=12, pady=(9, 12))
-            grade.adicionar(quadro)
 
-    def _fila_trabalho(self):
-        resumo = resumo_compras(SESSAO.usuario)
-        card = criar_card(self.conteudo)
-        card.pack(fill="x", pady=(13, 0))
-        interior = tk.Frame(card, bg=CORES["card"])
-        interior.pack(fill="x", padx=17, pady=15)
-        criar_titulo_secao(interior, "Minha fila de trabalho", "Pendências operacionais no contexto atual.")
-        itens = (
-            (resumo["aguardando_aprovacao"], "Solicitações para aprovar", "aprovacoes"),
-            (resumo["cotacoes_abertas"], "Cotações abertas", "cotacoes"),
-            (resumo["entregas_atrasadas"], "Pedidos atrasados", "entregas"),
-            (resumo["divergencias"], "Divergências de recebimento", "divergencias"),
-            (resumo["contratos_vencendo"], "Contratos vencendo", "contratos"),
-        )
-        for quantidade, texto, destino in itens:
-            linha = tk.Frame(interior, bg=CORES["card_secundario"])
-            linha.pack(fill="x", pady=2)
-            tk.Label(linha, text=str(quantidade), font=FONTES["subtitulo"], fg=COR_COMPRAS, bg=CORES["card_secundario"], width=5).pack(side="left", padx=(10, 0), pady=8)
-            tk.Label(linha, text=texto, font=FONTES["texto"], fg=CORES["text"], bg=CORES["card_secundario"]).pack(side="left")
-            criar_botao(linha, "ABRIR", lambda alvo=destino: self.abrir_secao(alvo), tipo="fantasma", compacto=True).pack(side="right", padx=8)
 
-    def _dados_secao(self):
-        secao_backend = "pedidos" if self.secao == "entregas" else self.secao
-        if self.secao == "alertas":
-            gerar_alertas_compras(SESSAO.usuario)
-        registros = listar_secao(secao_backend, SESSAO.usuario)
-        colunas = {
-            "minhas_solicitacoes": (("numero", "Solicitação", 155), ("titulo", "Necessidade", 260), ("prioridade", "Prioridade", 90), ("necessario_em", "Necessário em", 110), ("valor_estimado_centavos", "Estimado", 115), ("etapa", "Etapa", 140), ("status", "Status", 150)),
-            "solicitacoes": (("numero", "Solicitação", 155), ("titulo", "Necessidade", 240), ("solicitante_nome", "Solicitante", 150), ("departamento_nome", "Departamento", 140), ("prioridade", "Prioridade", 90), ("valor_estimado_centavos", "Estimado", 115), ("etapa", "Etapa", 130), ("status", "Status", 150)),
-            "aprovacoes": (("numero", "Solicitação", 155), ("titulo", "Necessidade", 280), ("solicitante_nome", "Solicitante", 160), ("prioridade", "Prioridade", 90), ("necessario_em", "Prazo", 105), ("valor_estimado_centavos", "Valor", 120), ("status", "Status", 155)),
-            "catalogo": (("codigo", "Código", 130), ("descricao", "Item homologado", 260), ("fornecedor_nome", "Fornecedor", 210), ("categoria_nome", "Categoria", 140), ("unidade", "Un.", 60), ("preco_centavos", "Preço", 110), ("prazo_dias", "Prazo/dias", 90), ("validade_preco", "Validade", 105)),
-            "cotacoes": (("numero", "Cotação", 155), ("solicitacao_titulo", "Solicitação", 250), ("resposta_ate", "Resposta até", 105), ("valor_referencia_centavos", "Referência", 120), ("valor_selecionado_centavos", "Selecionado", 120), ("saving_centavos", "Saving", 110), ("fornecedor_selecionado", "Fornecedor", 190), ("status", "Status", 105)),
-            "comparativo": (("cotacao_numero", "Cotação", 155), ("razao_social", "Fornecedor", 230), ("status_homologacao", "Homologação", 150), ("valor_total_centavos", "Valor total", 120), ("prazo_entrega_dias", "Prazo", 75), ("garantia", "Garantia", 130), ("score_preco", "Preço", 75), ("score_prazo", "Prazo", 75), ("score_qualidade", "Qualidade", 85), ("score_total", "Score", 75), ("selecionado", "Escolhido", 80)),
-            "negociacoes": (("cotacao_numero", "Cotação", 155), ("razao_social", "Fornecedor", 220), ("rodada", "Rodada", 70), ("proposta_anterior_centavos", "Anterior", 110), ("proposta_nova_centavos", "Negociado", 110), ("desconto_obtido_centavos", "Economia", 110), ("prazo_novo_dias", "Prazo", 75), ("responsavel_nome", "Responsável", 145), ("criado_em", "Data", 145)),
-            "pedidos": (("numero", "Pedido", 165), ("fornecedor_nome", "Fornecedor", 230), ("comprador_nome", "Comprador", 145), ("previsao_entrega", "Previsão", 105), ("valor_total_centavos", "Valor", 120), ("condicao_pagamento", "Pagamento", 150), ("status", "Status", 180)),
-            "entregas": (("numero", "Pedido", 165), ("fornecedor_nome", "Fornecedor", 230), ("previsao_entrega", "Previsão", 110), ("enviado_em", "Enviado", 145), ("confirmado_em", "Confirmado", 145), ("valor_total_centavos", "Valor", 120), ("status", "Status", 180)),
-            "fornecedores": (("codigo", "Código", 135), ("razao_social", "Razão social", 250), ("nome_fantasia", "Fantasia", 180), ("cnpj_cpf", "CNPJ/CPF", 145), ("categorias", "Categorias", 190), ("email", "E-mail", 210), ("status_homologacao", "Homologação", 160), ("score", "Score", 75)),
-            "homologacao": (("codigo", "Código", 135), ("razao_social", "Fornecedor", 260), ("cnpj_cpf", "CNPJ/CPF", 150), ("categorias", "Categorias", 200), ("status_homologacao", "Status", 180), ("restricoes", "Restrições", 280), ("score", "Score", 75)),
-            "avaliacoes": (("razao_social", "Fornecedor", 230), ("preco", "Preço", 75), ("prazo", "Prazo", 75), ("qualidade", "Qualidade", 85), ("atendimento", "Atendimento", 95), ("conformidade", "Conformidade", 100), ("score", "Score", 75), ("avaliador_nome", "Avaliador", 140), ("criado_em", "Data", 145)),
-            "documentos": (("razao_social", "Fornecedor", 230), ("tipo", "Tipo", 150), ("titulo", "Documento", 260), ("numero", "Número", 120), ("emissao", "Emissão", 105), ("validade", "Validade", 105), ("status", "Status", 100), ("classificacao", "Classificação", 110), ("documento_criado_em", "Incluído em", 145)),
-            "recebimentos": (("numero", "Recebimento", 165), ("pedido_numero", "Pedido", 165), ("fornecedor_nome", "Fornecedor", 220), ("nota_fiscal", "Nota fiscal", 120), ("recebido_em", "Recebido em", 105), ("documento_valor_centavos", "Documento", 120), ("possui_divergencia", "Divergência", 95), ("estoque_operacao_id", "Estoque", 80), ("financeiro_lancamento_id", "Financeiro", 85), ("status", "Status", 160)),
-            "divergencias": (("recebimento_numero", "Recebimento", 165), ("pedido_numero", "Pedido", 165), ("tipo", "Tipo", 155), ("descricao", "Descrição", 340), ("severidade", "Severidade", 90), ("status", "Status", 90), ("resolucao", "Resolução", 260), ("criado_em", "Data", 145)),
-            "contratos": (("numero", "Contrato", 155), ("fornecedor_nome", "Fornecedor", 220), ("objeto", "Objeto", 280), ("inicio", "Início", 100), ("termino", "Término", 100), ("valor_centavos", "Valor", 120), ("periodicidade", "Periodicidade", 110), ("renovacao_automatica", "Renova", 75), ("status", "Status", 100)),
-            "aditivos": (("numero", "Aditivo", 150), ("contrato_numero", "Contrato", 150), ("fornecedor_nome", "Fornecedor", 220), ("tipo", "Tipo", 130), ("descricao", "Descrição", 280), ("valor_anterior_centavos", "Valor anterior", 120), ("valor_novo_centavos", "Novo valor", 120), ("termino_novo", "Novo término", 110), ("criado_em", "Data", 145)),
-            "alertas": (("severidade", "Severidade", 100), ("tipo", "Tipo", 150), ("titulo", "Alerta", 260), ("mensagem", "Mensagem", 390), ("status", "Status", 90), ("criado_em", "Criado em", 145)),
-        }.get(self.secao, ())
-        return registros, colunas
 
-    def _secao_operacional(self):
-        self._cabecalho(ROTULOS[self.secao], SUBTITULOS.get(self.secao, "Operação especializada de Compras e Suprimentos 2.0."))
-        filtros = tk.Frame(self.conteudo, bg=CORES["bg"])
-        filtros.pack(fill="x", pady=(0, 10))
-        pesquisa = criar_campo_pesquisa(
-            filtros, placeholder="Pesquisar nesta seção...", cor_cursor=COR_COMPRAS,
-            ao_alterar=self._preencher_tabela,
-        )
-        pesquisa.pack(side="left", fill="x", expand=True, ipady=8)
-        criar_botao(filtros, "ATUALIZAR", lambda: self.abrir_secao(self.secao), tipo="fantasma", compacto=True).pack(side="right", padx=(8, 0))
-        self.registros, colunas = self._dados_secao()
-        card = criar_card(self.conteudo)
-        card.pack(fill="both", expand=True)
-        area = tk.Frame(card, bg=CORES["input"])
-        area.pack(fill="both", expand=True, padx=1, pady=1)
-        self.tabela = ttk.Treeview(area, columns=[x[0] for x in colunas], show="headings", height=20, style="Dark.Treeview")
-        for chave, titulo, largura in colunas:
-            self.tabela.heading(chave, text=titulo)
-            self.tabela.column(chave, width=largura, minwidth=55, anchor="w", stretch=True)
-        barra_y = ttk.Scrollbar(area, orient="vertical", command=self.tabela.yview, style="Dark.Vertical.TScrollbar")
-        barra_x = ttk.Scrollbar(area, orient="horizontal", command=self.tabela.xview, style="Dark.Horizontal.TScrollbar")
-        self.tabela.configure(yscrollcommand=barra_y.set, xscrollcommand=barra_x.set)
-        area.grid_rowconfigure(0, weight=1)
-        area.grid_columnconfigure(0, weight=1)
-        self.tabela.grid(row=0, column=0, sticky="nsew")
-        barra_y.grid(row=0, column=1, sticky="ns")
-        barra_x.grid(row=1, column=0, sticky="ew")
-        adicionar_divisorias_treeview(self.tabela, cor=CORES["border"])
-        self.estado_vazio = criar_estado_vazio(area, "▤", f"Nenhum registro em {ROTULOS[self.secao]}", "Utilize a ação contextual para iniciar este processo.", cor=COR_COMPRAS)
-        self._preencher_tabela()
-        if self.secao == "fornecedores":
-            self.editor_grade = EditorGrade(
-                self.tabela, colunas_editaveis={"razao_social", "nome_fantasia", "email", "categorias"},
-                salvar=self._salvar_edicao_fornecedor, parent=self.root, titulo="Fornecedores",
-            )
-            barra_grade = tk.Frame(card, bg=CORES["card"]); barra_grade.pack(fill="x", padx=12, pady=(5,8))
-            tk.Label(barra_grade, text="Duplo clique em dados cadastrais para editar. Valores críticos continuam em formulários.", bg=CORES["card"], fg=CORES["text_muted"], font=FONTES["micro"]).pack(side="left")
-            criar_botao(barra_grade, "XLSX", lambda: self.editor_grade.exportar_xlsx(), tipo="fantasma", compacto=True).pack(side="right", padx=(5,0))
-            criar_botao(barra_grade, "CSV", lambda: self.editor_grade.exportar_csv(), tipo="fantasma", compacto=True).pack(side="right")
-        self._barra_acoes()
 
-    def _salvar_edicao_fornecedor(self, iid, coluna, valor):
-        atualizar_fornecedor(int(str(iid).split("-")[0]), {coluna: valor}, SESSAO.usuario)
 
-    def _preencher_tabela(self, termo=""):
-        if self.tabela is None:
-            return
-        for item in self.tabela.get_children():
-            self.tabela.delete(item)
-        termo = termo.strip().lower()
-        for registro in self.registros:
-            if termo and termo not in " ".join(str(valor).lower() for valor in registro.values()):
-                continue
-            iid = str(registro.get("id") or len(self.tabela.get_children()) + 1)
-            if self.tabela.exists(iid):
-                iid = f"{iid}-{len(self.tabela.get_children())}"
-            self.tabela.insert("", "end", iid=iid, values=tuple(_formatar(registro.get(chave), chave) for chave in self.tabela["columns"]))
-        if self.tabela.get_children():
-            self.estado_vazio.place_forget()
-        else:
-            self.estado_vazio.place(relx=0, rely=0, relwidth=1, relheight=1)
-            self.estado_vazio.lift()
 
-    def _registro_selecionado(self):
-        if self.tabela is None or not self.tabela.selection():
-            messagebox.showwarning("Compras", "Selecione um registro.", parent=self.root)
-            return None
-        iid = self.tabela.selection()[0]
-        base = int(iid.split("-")[0])
-        return next((x for x in self.registros if int(x.get("id") or -1) == base), None)
 
-    def _barra_acoes(self):
-        linha = tk.Frame(self.conteudo, bg=CORES["bg"])
-        linha.pack(fill="x", pady=(10, 0))
-        def botao(texto, comando, tipo="secundario"):
-            criar_botao(linha, texto, comando, tipo=tipo, compacto=True).pack(side="left", padx=(0, 5))
-        if self.secao in {"minhas_solicitacoes", "solicitacoes"}:
-            botao("ENVIAR PARA APROVAÇÃO", self._enviar_solicitacao, "sucesso")
-            botao("CRIAR COTAÇÃO", self._nova_cotacao)
-            botao("HISTÓRICO", lambda: self._historico("cmp_solicitacoes"), "fantasma")
-            botao("COMENTAR", lambda: self._comentar("cmp_solicitacoes"), "fantasma")
-        elif self.secao == "aprovacoes":
-            botao("APROVAR", lambda: self._decidir_solicitacao("Aprovar"), "sucesso")
-            botao("SOLICITAR ALTERAÇÃO", lambda: self._decidir_solicitacao("Solicitar alteração"), "aviso")
-            botao("REJEITAR", lambda: self._decidir_solicitacao("Rejeitar"), "perigo")
-        elif self.secao == "cotacoes":
-            botao("REGISTRAR PROPOSTA", self._nova_proposta, "sucesso")
-            botao("CRIAR PEDIDO", self._novo_pedido)
-            botao("HISTÓRICO", lambda: self._historico("cmp_cotacoes"), "fantasma")
-        elif self.secao == "comparativo":
-            botao("NEGOCIAR", self._nova_negociacao)
-            botao("SELECIONAR FORNECEDOR", self._selecionar_fornecedor, "sucesso")
-        elif self.secao in {"pedidos", "entregas"}:
-            botao("APROVAR", lambda: self._aprovar_pedido(True), "sucesso")
-            botao("ENVIAR AO FORNECEDOR", self._enviar_pedido)
-            botao("ATUALIZAR ETAPA", self._mudar_status_pedido, "aviso")
-            botao("GERAR PDF", self._pdf_pedido, "fantasma")
-            botao("RECEBER", self._novo_recebimento, "sucesso")
-        elif self.secao == "fornecedores":
-            botao("NOVO CONTATO", self._novo_contato)
-            botao("AVALIAR", self._avaliar_fornecedor, "sucesso")
-        elif self.secao == "homologacao":
-            botao("HOMOLOGAR", lambda: self._homologar("Homologado"), "sucesso")
-            botao("COM RESTRIÇÕES", lambda: self._homologar("Homologado com restrições"), "aviso")
-            botao("BLOQUEAR", lambda: self._homologar("Bloqueado"), "perigo")
-        elif self.secao == "documentos":
-            botao("ADICIONAR DOCUMENTO", self._novo_documento, "sucesso")
-            botao("VERIFICAR INTEGRIDADE", self._verificar_documento, "fantasma")
-        elif self.secao == "recebimentos":
-            botao("GERAR CONTA A PAGAR", self._integrar_financeiro, "sucesso")
-            botao("REGISTRAR DIVERGÊNCIA", self._registrar_divergencia, "aviso")
-            botao("HISTÓRICO", lambda: self._historico("cmp_recebimentos"), "fantasma")
-        elif self.secao == "divergencias":
-            botao("RESOLVER DIVERGÊNCIA", self._resolver_divergencia, "sucesso")
-        elif self.secao == "contratos":
-            botao("NOVO ADITIVO", self._novo_aditivo)
-            botao("HISTÓRICO", lambda: self._historico("cmp_contratos"), "fantasma")
-        elif self.secao == "alertas":
-            botao("MARCAR RESOLVIDO", self._resolver_alerta, "sucesso")
 
-    def _catalogos(self):
-        return garantir_catalogos(SESSAO.usuario)
 
-    def _opcoes(self, chave, rotulo="nome"):
-        return [(x["id"], x.get(rotulo) or x.get("razao_social") or x.get("codigo") or str(x["id"])) for x in self._catalogos().get(chave, [])]
 
-    def _formulario(self, titulo, campos, callback, *, largura=680, atualizar=True):
-        janela = tk.Toplevel(self.root)
-        janela.title(titulo)
-        janela.configure(bg=CORES["bg"])
-        preparar_janela_secundaria(janela, self.root, largura, min(850, 190 + len(campos) * 53), minimo=(540, 390))
-        viewport = AreaRolavel(janela)
-        viewport.pack(fill="both", expand=True, padx=22, pady=18)
-        corpo = viewport.conteudo
-        tk.Label(corpo, text=titulo, font=FONTES["titulo"], fg=CORES["text"], bg=CORES["bg"]).pack(anchor="w", pady=(0, 14))
-        entradas = {}
-        for chave, rotulo, tipo, opcoes in campos:
-            linha = tk.Frame(corpo, bg=CORES["bg"])
-            linha.pack(fill="x", pady=4)
-            tk.Label(linha, text=rotulo.upper(), font=("Segoe UI", 8, "bold"), fg=CORES["text_sec"], bg=CORES["bg"], width=27, anchor="w").pack(side="left")
-            if tipo == "opcoes":
-                valores = [opcao[1] if isinstance(opcao, tuple) else opcao for opcao in opcoes]
-                campo = ttk.Combobox(linha, values=valores, state="readonly", style="Dark.TCombobox")
-                if valores:
-                    campo.current(0)
-            elif tipo == "booleano":
-                variavel = tk.BooleanVar(value=False)
-                campo = tk.Checkbutton(linha, variable=variavel, bg=CORES["bg"], activebackground=CORES["bg"])
-                campo._variavel = variavel
-            else:
-                campo = tk.Entry(linha, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-            campo.pack(side="left", fill="x", expand=True, ipady=6)
-            entradas[chave] = (campo, opcoes)
-        def salvar():
-            valores = {}
-            for chave, (campo, opcoes) in entradas.items():
-                valor = campo._variavel.get() if hasattr(campo, "_variavel") else campo.get().strip()
-                if opcoes and isinstance(opcoes[0], tuple):
-                    valor = {rotulo: identificador for identificador, rotulo in opcoes}.get(valor, valor)
-                valores[chave] = valor
-            try:
-                callback(valores)
-                janela.destroy()
-                if atualizar:
-                    self.abrir_secao(self.secao)
-            except (ValueError, PermissionError, FileNotFoundError, OSError) as erro:
-                messagebox.showerror("Compras", str(erro), parent=janela)
-        criar_botao(corpo, "SALVAR", salvar).pack(anchor="e", pady=(15, 8))
-        return janela
 
-    def _nova_acao(self):
-        mapa = {
-            "visao": self._nova_solicitacao,
-            "minhas_solicitacoes": self._nova_solicitacao,
-            "solicitacoes": self._nova_solicitacao,
-            "cotacoes": self._nova_cotacao,
-            "fornecedores": self._novo_fornecedor,
-            "homologacao": self._novo_fornecedor,
-            "catalogo": self._novo_item_catalogo,
-            "documentos": self._novo_documento,
-            "pedidos": self._novo_pedido,
-            "entregas": self._novo_recebimento,
-            "recebimentos": self._novo_recebimento,
-            "contratos": self._novo_contrato,
-        }
-        acao = mapa.get(self.secao)
-        if acao:
-            acao()
-        else:
-            messagebox.showinfo("Compras", "Esta seção é alimentada pelas operações do ciclo de compras.", parent=self.root)
 
-    def _nova_solicitacao(self):
-        catalogos = self._catalogos()
-        janela = tk.Toplevel(self.root)
-        janela.title("Nova solicitação de compra")
-        janela.configure(bg=CORES["bg"])
-        preparar_janela_secundaria(janela, self.root, 960, 850, minimo=(760, 620))
-        viewport = AreaRolavel(janela)
-        viewport.pack(fill="both", expand=True, padx=22, pady=18)
-        corpo = viewport.conteudo
-        tk.Label(corpo, text="Nova solicitação de compra", font=FONTES["titulo"], fg=CORES["text"], bg=CORES["bg"]).pack(anchor="w")
-        tk.Label(corpo, text="Registre a necessidade e inclua todos os produtos ou serviços da mesma demanda.", font=FONTES["texto"], fg=CORES["text_sec"], bg=CORES["bg"]).pack(anchor="w", pady=(3, 14))
 
-        metadados = criar_card(corpo)
-        metadados.pack(fill="x")
-        grade_meta = tk.Frame(metadados, bg=CORES["card"])
-        grade_meta.pack(fill="x", padx=14, pady=12)
-        grade_meta.grid_columnconfigure(1, weight=1)
-        entradas = {}
 
-        def campo_meta(linha, chave, rotulo, widget):
-            tk.Label(grade_meta, text=rotulo.upper(), font=("Segoe UI", 8, "bold"), fg=CORES["text_sec"], bg=CORES["card"], anchor="w").grid(row=linha, column=0, sticky="w", padx=(0, 12), pady=4)
-            widget.grid(row=linha, column=1, sticky="ew", pady=4, ipady=5)
-            entradas[chave] = widget
 
-        campo_meta(0, "titulo", "Necessidade / título", tk.Entry(grade_meta, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat"))
-        campo_meta(1, "justificativa", "Justificativa", tk.Entry(grade_meta, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat"))
-        seletores = tk.Frame(grade_meta, bg=CORES["card"])
-        seletores.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
-        for indice in range(5):
-            seletores.grid_columnconfigure(indice, weight=1)
-        mapas = {}
-        definicoes = (
-            ("tipo", "Tipo", ("Produto", "Serviço")),
-            ("prioridade", "Prioridade", ("Baixa", "Normal", "Alta", "Urgente", "Crítica")),
-            ("departamento_id", "Departamento", [("", "Não definido")] + [(x["id"], x["nome"]) for x in catalogos["departamentos"]]),
-            ("centro_custo_id", "Centro de custo", [("", "Não definido")] + [(x["id"], f"{x['codigo']} · {x['nome']}") for x in catalogos["centros_custo"]]),
-        )
-        for coluna, (chave, rotulo, opcoes) in enumerate(definicoes):
-            bloco = tk.Frame(seletores, bg=CORES["card"]); bloco.grid(row=0, column=coluna, sticky="ew", padx=3)
-            tk.Label(bloco, text=rotulo.upper(), font=("Segoe UI", 7, "bold"), fg=CORES["text_sec"], bg=CORES["card"]).pack(anchor="w")
-            nomes = [x[1] if isinstance(x, tuple) else x for x in opcoes]
-            combo = ttk.Combobox(bloco, values=nomes, state="readonly", style="Dark.TCombobox")
-            combo.pack(fill="x", ipady=4)
-            if nomes: combo.current(0)
-            entradas[chave] = combo
-            mapas[chave] = {x[1]: x[0] for x in opcoes if isinstance(x, tuple)}
-        bloco_prazo = tk.Frame(seletores, bg=CORES["card"]); bloco_prazo.grid(row=0, column=4, sticky="ew", padx=3)
-        tk.Label(bloco_prazo, text="NECESSÁRIO EM", font=("Segoe UI", 7, "bold"), fg=CORES["text_sec"], bg=CORES["card"]).pack(anchor="w")
-        entradas["necessario_em"] = tk.Entry(bloco_prazo, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-        entradas["necessario_em"].pack(fill="x", ipady=5)
-        recorrencia = tk.Frame(grade_meta, bg=CORES["card"]); recorrencia.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 0))
-        variavel_recorrente = tk.BooleanVar(value=False)
-        tk.Checkbutton(recorrencia, text="Compra recorrente", variable=variavel_recorrente, bg=CORES["card"], fg=CORES["text"], selectcolor=CORES["input"], activebackground=CORES["card"], activeforeground=CORES["text"]).pack(side="left")
-        entradas["recorrencia"] = tk.Entry(recorrencia, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-        entradas["recorrencia"].pack(side="left", fill="x", expand=True, padx=(12, 0), ipady=5)
 
-        itens: list[dict] = []
-        quadro_item = criar_card(corpo)
-        quadro_item.pack(fill="x", pady=(12, 0))
-        interior = tk.Frame(quadro_item, bg=CORES["card"]); interior.pack(fill="x", padx=14, pady=12)
-        criar_titulo_secao(interior, "Itens da solicitação", "Adicione quantos produtos ou serviços forem necessários.")
-        item_campos = {}
-        linha_item = tk.Frame(interior, bg=CORES["card"]); linha_item.pack(fill="x", pady=(8, 5))
-        for indice, (chave, rotulo, largura) in enumerate((("descricao", "Descrição", 22), ("especificacao", "Especificação", 24), ("quantidade", "Quantidade", 10), ("unidade", "Unidade", 8), ("valor_estimado_unitario", "Valor unitário", 12))):
-            bloco = tk.Frame(linha_item, bg=CORES["card"]); bloco.pack(side="left", fill="x", expand=indice < 2, padx=2)
-            tk.Label(bloco, text=rotulo.upper(), font=("Segoe UI", 7, "bold"), fg=CORES["text_sec"], bg=CORES["card"]).pack(anchor="w")
-            entrada = tk.Entry(bloco, width=largura, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-            entrada.pack(fill="x", ipady=5); item_campos[chave] = entrada
-        if not item_campos["unidade"].get(): item_campos["unidade"].insert(0, "UN")
-        mapas["estoque_item_id"] = {"Não relacionado": "", **{f"{x['codigo']} · {x['nome']}": x["id"] for x in catalogos["itens_estoque"]}}
-        combo_estoque = ttk.Combobox(interior, values=list(mapas["estoque_item_id"]), state="readonly", style="Dark.TCombobox")
-        combo_estoque.pack(fill="x", pady=(4, 7), ipady=4)
-        combo_estoque.current(0)
-        tabela_itens = ttk.Treeview(interior, columns=("descricao", "quantidade", "unidade", "unitario", "estoque"), show="headings", height=6, style="Dark.Treeview")
-        for chave, titulo, largura in (("descricao", "Item", 360), ("quantidade", "Qtd.", 75), ("unidade", "Un.", 65), ("unitario", "Estimado unitário", 125), ("estoque", "Estoque relacionado", 220)):
-            tabela_itens.heading(chave, text=titulo); tabela_itens.column(chave, width=largura, minwidth=55, anchor="w")
-        tabela_itens.pack(fill="x", pady=(4, 6))
-        adicionar_divisorias_treeview(tabela_itens, cor=CORES["border"])
 
-        def redesenhar_itens():
-            for iid in tabela_itens.get_children(): tabela_itens.delete(iid)
-            nomes_estoque = {valor: nome for nome, valor in mapas["estoque_item_id"].items()}
-            for indice, item in enumerate(itens):
-                tabela_itens.insert("", "end", iid=str(indice), values=(item["descricao"], item["quantidade"], item["unidade"], item["valor_estimado_unitario"], nomes_estoque.get(item.get("estoque_item_id"), "Não relacionado")))
 
-        def adicionar_item():
-            dados = {chave: entrada.get().strip() for chave, entrada in item_campos.items()}
-            if not dados["descricao"] or not dados["quantidade"]:
-                messagebox.showwarning("Solicitação", "Informe descrição e quantidade do item.", parent=janela)
-                return
-            dados["estoque_item_id"] = mapas["estoque_item_id"].get(combo_estoque.get(), "")
-            itens.append(dados); redesenhar_itens()
-            for chave, entrada in item_campos.items():
-                entrada.delete(0, "end")
-            item_campos["unidade"].insert(0, "UN")
 
-        def remover_item():
-            if not tabela_itens.selection(): return
-            itens.pop(int(tabela_itens.selection()[0])); redesenhar_itens()
 
-        botoes_item = tk.Frame(interior, bg=CORES["card"]); botoes_item.pack(fill="x")
-        criar_botao(botoes_item, "+ ADICIONAR ITEM", adicionar_item, tipo="secundario", compacto=True).pack(side="left")
-        criar_botao(botoes_item, "REMOVER ITEM", remover_item, tipo="fantasma", compacto=True).pack(side="left", padx=5)
 
-        def salvar(enviar):
-            if not itens:
-                messagebox.showwarning("Solicitação", "Adicione ao menos um item.", parent=janela)
-                return
-            dados = {
-                "titulo": entradas["titulo"].get().strip(),
-                "justificativa": entradas["justificativa"].get().strip(),
-                "tipo": entradas["tipo"].get(), "prioridade": entradas["prioridade"].get(),
-                "necessario_em": entradas["necessario_em"].get().strip(),
-                "departamento_id": mapas["departamento_id"].get(entradas["departamento_id"].get(), ""),
-                "centro_custo_id": mapas["centro_custo_id"].get(entradas["centro_custo_id"].get(), ""),
-                "recorrente": variavel_recorrente.get(), "recorrencia": entradas["recorrencia"].get().strip(),
-            }
-            try:
-                criar_solicitacao(dados, itens, SESSAO.usuario, enviar=enviar)
-                janela.destroy(); self.abrir_secao("minhas_solicitacoes")
-            except (ValueError, PermissionError) as erro:
-                messagebox.showerror("Solicitação", str(erro), parent=janela)
 
-        rodape = tk.Frame(corpo, bg=CORES["bg"]); rodape.pack(fill="x", pady=(12, 8))
-        criar_botao(rodape, "SALVAR E ENVIAR", lambda: salvar(True), tipo="sucesso").pack(side="right")
-        criar_botao(rodape, "SALVAR RASCUNHO", lambda: salvar(False), tipo="secundario").pack(side="right", padx=7)
 
-    def _enviar_solicitacao(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        try:
-            enviar_solicitacao(registro["id"], SESSAO.usuario)
-            self.abrir_secao(self.secao)
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Solicitação", str(erro), parent=self.root)
 
-    def _decidir_solicitacao(self, decisao):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        comentario = simpledialog.askstring("Decisão", "Comentário / justificativa:", parent=self.root) or "Decisão registrada na interface."
-        try:
-            decidir_solicitacao(registro["id"], decisao, comentario, SESSAO.usuario)
-            self.abrir_secao("aprovacoes")
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Aprovação", str(erro), parent=self.root)
 
-    def _nova_cotacao(self):
-        solicitacoes = [x for x in listar_secao("solicitacoes", SESSAO.usuario) if x["status"] in {"Aprovada", "Em cotação"}]
-        fornecedores = self._catalogos()["fornecedores"]
-        if not solicitacoes or not fornecedores:
-            messagebox.showwarning("Cotação", "Cadastre fornecedores e aprove uma solicitação antes de cotar.", parent=self.root)
-            return
-        janela = tk.Toplevel(self.root)
-        janela.title("Criar cotação")
-        janela.configure(bg=CORES["bg"])
-        preparar_janela_secundaria(janela, self.root, 720, 680, minimo=(620, 520))
-        corpo = tk.Frame(janela, bg=CORES["bg"])
-        corpo.pack(fill="both", expand=True, padx=22, pady=18)
-        tk.Label(corpo, text="Criar cotação", font=FONTES["titulo"], fg=CORES["text"], bg=CORES["bg"]).pack(anchor="w")
-        opcoes_sol = {f"{x['numero']} · {x['titulo']}": x["id"] for x in solicitacoes}
-        combo = ttk.Combobox(corpo, values=list(opcoes_sol), state="readonly", style="Dark.TCombobox")
-        combo.pack(fill="x", pady=(14, 8), ipady=5)
-        combo.current(0)
-        tk.Label(corpo, text="FORNECEDORES · SELECIONE UM OU MAIS", font=("Segoe UI", 8, "bold"), fg=CORES["text_sec"], bg=CORES["bg"]).pack(anchor="w", pady=(6, 4))
-        lista = tk.Listbox(corpo, selectmode="multiple", bg=CORES["input"], fg=CORES["text"], selectbackground=CORES["primary"], relief="flat", height=12)
-        lista.pack(fill="both", expand=True)
-        for fornecedor in fornecedores:
-            lista.insert("end", f"{fornecedor['razao_social']} · {fornecedor['status_homologacao']}")
-        prazo = tk.Entry(corpo, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-        prazo.pack(fill="x", pady=(10, 5), ipady=6)
-        prazo.insert(0, "Prazo de resposta DD/MM/AAAA")
-        condicoes = tk.Entry(corpo, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-        condicoes.pack(fill="x", pady=5, ipady=6)
-        condicoes.insert(0, "Condições desejadas")
-        def salvar():
-            selecionados = [fornecedores[i]["id"] for i in lista.curselection()]
-            try:
-                criar_cotacao(opcoes_sol[combo.get()], selecionados, {"resposta_ate": prazo.get(), "condicoes_desejadas": condicoes.get()}, SESSAO.usuario)
-                janela.destroy()
-                self.abrir_secao("cotacoes")
-            except (ValueError, PermissionError) as erro:
-                messagebox.showerror("Cotação", str(erro), parent=janela)
-        criar_botao(corpo, "CRIAR COTAÇÃO", salvar).pack(anchor="e", pady=(12, 0))
 
-    def _nova_proposta(self):
-        cotacao = self._registro_selecionado()
-        if not cotacao:
-            return
-        fornecedores = [x for x in obter_fornecedores_cotacao(cotacao["id"], SESSAO.usuario) if x["status"] in {"Convidado", "Respondida", "Em negociação"}]
-        itens = obter_itens_solicitacao(cotacao["solicitacao_id"], SESSAO.usuario)
-        if not fornecedores or not itens:
-            messagebox.showwarning("Proposta", "A cotação não possui fornecedores ou itens.", parent=self.root)
-            return
-        janela = tk.Toplevel(self.root)
-        janela.title("Registrar proposta")
-        janela.configure(bg=CORES["bg"])
-        preparar_janela_secundaria(janela, self.root, 820, 760, minimo=(680, 560))
-        viewport = AreaRolavel(janela)
-        viewport.pack(fill="both", expand=True, padx=22, pady=18)
-        corpo = viewport.conteudo
-        tk.Label(corpo, text=f"Proposta · {cotacao['numero']}", font=FONTES["titulo"], fg=CORES["text"], bg=CORES["bg"]).pack(anchor="w")
-        mapa_fornecedores = {x["razao_social"]: x["fornecedor_id"] for x in fornecedores}
-        combo = ttk.Combobox(corpo, values=list(mapa_fornecedores), state="readonly", style="Dark.TCombobox")
-        combo.pack(fill="x", pady=(12, 8), ipady=5)
-        combo.current(0)
-        entradas_itens = []
-        for item in itens:
-            linha = tk.Frame(corpo, bg=CORES["card"])
-            linha.pack(fill="x", pady=3)
-            tk.Label(linha, text=f"{item['descricao']} · {float(item['quantidade']):g} {item['unidade']}", font=FONTES["texto"], fg=CORES["text"], bg=CORES["card"], anchor="w").pack(side="left", fill="x", expand=True, padx=10, pady=8)
-            entrada = tk.Entry(linha, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat", width=18)
-            entrada.insert(0, "Valor unitário")
-            entrada.pack(side="right", padx=8, ipady=5)
-            entradas_itens.append((item, entrada))
-        campos = {}
-        for chave, rotulo in (("frete", "Frete"), ("impostos", "Impostos"), ("desconto", "Desconto"), ("prazo_entrega_dias", "Prazo de entrega/dias"), ("validade_proposta", "Validade"), ("forma_pagamento", "Forma de pagamento"), ("parcelamento", "Parcelamento"), ("garantia", "Garantia")):
-            linha = tk.Frame(corpo, bg=CORES["bg"])
-            linha.pack(fill="x", pady=3)
-            tk.Label(linha, text=rotulo.upper(), font=("Segoe UI", 8, "bold"), fg=CORES["text_sec"], bg=CORES["bg"], width=25, anchor="w").pack(side="left")
-            entrada = tk.Entry(linha, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-            entrada.pack(side="left", fill="x", expand=True, ipady=5)
-            campos[chave] = entrada
-        def salvar():
-            try:
-                linhas = [{"solicitacao_item_id": item["id"], "quantidade": item["quantidade"], "valor_unitario": entrada.get()} for item, entrada in entradas_itens]
-                registrar_proposta(cotacao["id"], mapa_fornecedores[combo.get()], {chave: entrada.get() for chave, entrada in campos.items()}, linhas, SESSAO.usuario)
-                janela.destroy()
-                self.abrir_secao("comparativo")
-            except (ValueError, PermissionError) as erro:
-                messagebox.showerror("Proposta", str(erro), parent=janela)
-        criar_botao(corpo, "REGISTRAR PROPOSTA", salvar).pack(anchor="e", pady=(12, 8))
 
-    def _nova_negociacao(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        self._formulario("Registrar negociação", (
-            ("valor_novo", "Novo valor total", "texto", ()),
-            ("prazo_novo_dias", "Novo prazo em dias", "texto", ()),
-            ("condicoes", "Condições negociadas", "texto", ()),
-            ("observacao", "Observação", "texto", ()),
-        ), lambda d: registrar_negociacao(registro["id"], d, SESSAO.usuario))
 
-    def _selecionar_fornecedor(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        motivo = simpledialog.askstring("Escolha do fornecedor", "Justificativa da escolha:", parent=self.root)
-        if motivo is None:
-            return
-        try:
-            selecionar_fornecedor(registro["cotacao_id"], registro["fornecedor_id"], motivo, SESSAO.usuario)
-            self.abrir_secao("cotacoes")
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Fornecedor", str(erro), parent=self.root)
 
-    def _novo_pedido(self):
-        registro = self._registro_selecionado()
-        cotacoes = [x for x in listar_secao("cotacoes", SESSAO.usuario) if x["status"] == "Encerrada"]
-        cotacao_id = registro.get("id") if registro and self.secao == "cotacoes" else None
-        if not cotacao_id:
-            if not cotacoes:
-                messagebox.showwarning("Pedido", "Finalize uma cotação antes de criar o pedido.", parent=self.root)
-                return
-            escolha = simpledialog.askstring("Pedido", "Informe o ID da cotação encerrada:\n" + "\n".join(f"{x['id']} · {x['numero']}" for x in cotacoes[:12]), parent=self.root)
-            if not escolha:
-                return
-            cotacao_id = int(escolha)
-        self._formulario("Gerar pedido de compra", (
-            ("entrega_endereco", "Endereço de entrega", "texto", ()),
-            ("entrega_contato", "Contato no recebimento", "texto", ()),
-            ("previsao_entrega", "Previsão de entrega", "texto", ()),
-            ("condicao_pagamento", "Condição de pagamento", "texto", ()),
-            ("vencimento", "Vencimento", "texto", ()),
-            ("parcelas", "Parcelas", "texto", ()),
-        ), lambda d: criar_pedido(cotacao_id, d, SESSAO.usuario))
 
-    def _aprovar_pedido(self, aprovar):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        comentario = simpledialog.askstring("Pedido", "Comentário:", parent=self.root) or "Decisão registrada."
-        try:
-            aprovar_pedido(registro["id"], aprovar, comentario, SESSAO.usuario)
-            self.abrir_secao(self.secao)
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Pedido", str(erro), parent=self.root)
 
-    def _enviar_pedido(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        try:
-            enviar_pedido(registro["id"], SESSAO.usuario)
-            self.abrir_secao(self.secao)
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Pedido", str(erro), parent=self.root)
 
-    def _mudar_status_pedido(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        status = simpledialog.askstring("Etapa do pedido", "Novo status:\nConfirmado pelo fornecedor\nEm produção\nEm transporte", parent=self.root)
-        if not status:
-            return
-        try:
-            atualizar_status_pedido(registro["id"], status, SESSAO.usuario)
-            self.abrir_secao(self.secao)
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Pedido", str(erro), parent=self.root)
 
-    def _pdf_pedido(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        destino = filedialog.asksaveasfilename(parent=self.root, title="Salvar pedido", defaultextension=".pdf", filetypes=(("PDF", "*.pdf"),))
-        if not destino:
-            return
-        try:
-            gerar_pdf_pedido(registro["id"], destino, SESSAO.usuario)
-            messagebox.showinfo("Pedido", f"PDF gerado em:\n{destino}", parent=self.root)
-        except (ValueError, PermissionError, OSError) as erro:
-            messagebox.showerror("Pedido", str(erro), parent=self.root)
 
-    def _novo_recebimento(self):
-        registro = self._registro_selecionado()
-        pedidos = [x for x in listar_secao("pedidos", SESSAO.usuario) if x["status"] in {"Enviado ao fornecedor", "Confirmado pelo fornecedor", "Em produção", "Em transporte", "Parcialmente recebido"}]
-        pedido_id = registro.get("id") if registro and self.secao in {"pedidos", "entregas"} else None
-        if not pedido_id:
-            if not pedidos:
-                messagebox.showwarning("Recebimento", "Nenhum pedido está disponível para recebimento.", parent=self.root)
-                return
-            escolha = simpledialog.askstring("Recebimento", "Informe o ID do pedido:\n" + "\n".join(f"{x['id']} · {x['numero']}" for x in pedidos[:12]), parent=self.root)
-            if not escolha:
-                return
-            pedido_id = int(escolha)
-        itens = obter_itens_pedido(pedido_id, SESSAO.usuario)
-        catalogos = self._catalogos()
-        janela = tk.Toplevel(self.root)
-        janela.title("Registrar recebimento")
-        janela.configure(bg=CORES["bg"])
-        preparar_janela_secundaria(janela, self.root, 900, 780, minimo=(720, 560))
-        viewport = AreaRolavel(janela)
-        viewport.pack(fill="both", expand=True, padx=22, pady=18)
-        corpo = viewport.conteudo
-        tk.Label(corpo, text="Conferência do recebimento", font=FONTES["titulo"], fg=CORES["text"], bg=CORES["bg"]).pack(anchor="w")
-        campos = {}
-        for chave, rotulo in (("nota_fiscal", "Nota fiscal"), ("chave_nfe", "Chave NF-e"), ("documento_valor", "Valor do documento"), ("recebido_em", "Data de recebimento"), ("observacao", "Observação")):
-            linha = tk.Frame(corpo, bg=CORES["bg"]); linha.pack(fill="x", pady=3)
-            tk.Label(linha, text=rotulo.upper(), font=("Segoe UI", 8, "bold"), fg=CORES["text_sec"], bg=CORES["bg"], width=24, anchor="w").pack(side="left")
-            entrada = tk.Entry(linha, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-            if chave == "recebido_em": entrada.insert(0, date.today().strftime("%d/%m/%Y"))
-            entrada.pack(side="left", fill="x", expand=True, ipady=5); campos[chave] = entrada
-        opcoes_deposito = {f"{x['codigo']} · {x['nome']}": x["id"] for x in catalogos["depositos"]}
-        combo_deposito = ttk.Combobox(corpo, values=list(opcoes_deposito), state="readonly", style="Dark.TCombobox")
-        combo_deposito.pack(fill="x", pady=8, ipady=5)
-        if opcoes_deposito: combo_deposito.current(0)
-        entradas_itens = []
-        for item in itens:
-            quadro = criar_card(corpo, fundo=CORES["card"]); quadro.pack(fill="x", pady=4)
-            tk.Label(quadro, text=f"{item['descricao']} · pedido {float(item['quantidade']):g} · recebido {float(item['quantidade_recebida']):g}", font=FONTES["subtitulo"], fg=CORES["text"], bg=CORES["card"]).pack(anchor="w", padx=10, pady=(8, 5))
-            linha = tk.Frame(quadro, bg=CORES["card"]); linha.pack(fill="x", padx=10, pady=(0, 8))
-            valores = {}
-            for chave, rotulo in (("quantidade_recebida", "Recebido"), ("quantidade_aceita", "Aceito"), ("quantidade_recusada", "Recusado"), ("lote_numero", "Lote"), ("validade", "Validade"), ("motivo_recusa", "Motivo")):
-                bloco = tk.Frame(linha, bg=CORES["card"]); bloco.pack(side="left", fill="x", expand=True, padx=2)
-                tk.Label(bloco, text=rotulo.upper(), font=("Segoe UI", 7, "bold"), fg=CORES["text_sec"], bg=CORES["card"]).pack(anchor="w")
-                entrada = tk.Entry(bloco, bg=CORES["input"], fg=CORES["text"], insertbackground=COR_COMPRAS, relief="flat")
-                entrada.pack(fill="x", ipady=4); valores[chave] = entrada
-            entradas_itens.append((item, valores))
-        def salvar():
-            try:
-                linhas = [{"pedido_item_id": item["id"], **{chave: entrada.get() for chave, entrada in valores.items()}} for item, valores in entradas_itens]
-                registrar_recebimento(pedido_id, {**{chave: entrada.get() for chave, entrada in campos.items()}, "deposito_id": opcoes_deposito.get(combo_deposito.get())}, linhas, SESSAO.usuario)
-                janela.destroy(); self.abrir_secao("recebimentos")
-            except (ValueError, PermissionError) as erro:
-                messagebox.showerror("Recebimento", str(erro), parent=janela)
-        criar_botao(corpo, "CONFIRMAR RECEBIMENTO", salvar).pack(anchor="e", pady=(12, 8))
 
-    def _integrar_financeiro(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        self._formulario("Gerar conta a pagar", (("vencimento", "Vencimento", "texto", ()), ("parcelas", "Parcelas", "texto", ())), lambda d: integrar_recebimento_financeiro(registro["id"], d, SESSAO.usuario))
 
-    def _resolver_divergencia(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        resolucao = simpledialog.askstring("Divergência", "Descreva a resolução:", parent=self.root)
-        if not resolucao:
-            return
-        try:
-            resolver_divergencia(registro["id"], resolucao, SESSAO.usuario)
-            self.abrir_secao("divergencias")
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Divergência", str(erro), parent=self.root)
 
-    def _registrar_divergencia(self):
-        recebimento = self._registro_selecionado()
-        if not recebimento:
-            return
-        self._formulario("Registrar divergência", (
-            ("tipo", "Tipo", "opcoes", ("Quantidade diferente", "Preço divergente", "Produto incorreto", "Produto danificado", "Documento divergente", "Atraso", "Outro")),
-            ("severidade", "Severidade", "opcoes", ("Baixa", "Média", "Alta", "Crítica")),
-            ("descricao", "Descrição da evidência", "texto", ()),
-        ), lambda d: registrar_divergencia_manual(recebimento["id"], d, SESSAO.usuario))
 
-    def _novo_fornecedor(self):
-        self._formulario("Cadastrar fornecedor", (
-            ("codigo", "Código interno", "texto", ()), ("razao_social", "Razão social", "texto", ()),
-            ("nome_fantasia", "Nome fantasia", "texto", ()), ("cnpj_cpf", "CNPJ / CPF", "texto", ()),
-            ("inscricao_estadual", "Inscrição estadual", "texto", ()), ("endereco", "Endereço", "texto", ()),
-            ("cidade", "Cidade", "texto", ()), ("uf", "UF", "texto", ()),
-            ("telefone", "Telefone", "texto", ()), ("email", "E-mail", "texto", ()),
-            ("site", "Site", "texto", ()), ("categorias", "Categorias fornecidas", "texto", ()),
-            ("dados_bancarios", "Dados bancários", "texto", ()), ("pix", "Chave PIX", "texto", ()),
-        ), lambda d: criar_fornecedor(d, SESSAO.usuario), largura=760)
 
-    def _novo_contato(self):
-        fornecedor = self._registro_selecionado()
-        if not fornecedor:
-            return
-        self._formulario("Novo contato do fornecedor", (("tipo", "Tipo", "opcoes", ("Comercial", "Financeiro", "Suporte", "Logística", "Executivo")), ("nome", "Nome", "texto", ()), ("cargo", "Cargo", "texto", ()), ("email", "E-mail", "texto", ()), ("telefone", "Telefone", "texto", ()), ("principal", "Contato principal", "booleano", ())), lambda d: adicionar_contato_fornecedor(fornecedor["id"], d, SESSAO.usuario))
 
-    def _homologar(self, status):
-        fornecedor = self._registro_selecionado()
-        if not fornecedor:
-            return
-        restricoes = simpledialog.askstring("Homologação", "Restrições / justificativa:", parent=self.root) or ""
-        try:
-            homologar_fornecedor(fornecedor["id"], status, restricoes, SESSAO.usuario)
-            self.abrir_secao("homologacao")
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Homologação", str(erro), parent=self.root)
 
-    def _avaliar_fornecedor(self):
-        fornecedor = self._registro_selecionado()
-        if not fornecedor:
-            return
-        self._formulario("Avaliar fornecedor", (("preco", "Preço 0-10", "texto", ()), ("prazo", "Prazo 0-10", "texto", ()), ("qualidade", "Qualidade 0-10", "texto", ()), ("atendimento", "Atendimento 0-10", "texto", ()), ("conformidade", "Conformidade 0-10", "texto", ()), ("comentario", "Comentário", "texto", ())), lambda d: avaliar_fornecedor(fornecedor["id"], d, SESSAO.usuario))
 
-    def _novo_documento(self):
-        fornecedores = self._catalogos()["fornecedores"]
-        if not fornecedores:
-            messagebox.showwarning("Documentos", "Cadastre o fornecedor antes de anexar documentos.", parent=self.root)
-            return
-        arquivo = filedialog.askopenfilename(
-            parent=self.root,
-            title="Selecionar documento do fornecedor",
-            filetypes=(("Documentos", "*.pdf *.doc *.docx *.xls *.xlsx *.csv *.txt *.png *.jpg *.jpeg"), ("Todos", "*.*")),
-        )
-        if not arquivo:
-            return
-        opcoes = [(x["id"], f"{x['codigo']} · {x['razao_social']}") for x in fornecedores]
-        self._formulario("Classificar documento do fornecedor", (
-            ("fornecedor_id", "Fornecedor", "opcoes", opcoes),
-            ("titulo", "Título", "texto", ()),
-            ("tipo", "Tipo", "opcoes", ("Certidão", "Documento fiscal", "Contrato", "Proposta", "Dados bancários", "Comprovante", "Outro")),
-            ("numero", "Número", "texto", ()),
-            ("emissao", "Emissão", "texto", ()),
-            ("validade", "Validade", "texto", ()),
-            ("classificacao", "Classificação", "opcoes", ("Público", "Interno", "Confidencial", "Restrito")),
-            ("status", "Status", "opcoes", ("Válido", "Pendente", "Vencido")),
-            ("observacao", "Observação", "texto", ()),
-        ), lambda d: registrar_documento_fornecedor(d.pop("fornecedor_id"), d, arquivo, SESSAO.usuario), largura=760)
 
-    def _verificar_documento(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        from enterprise.ferramentas import verificar_documento
-        try:
-            resultado = verificar_documento(registro["documento_id"], SESSAO.usuario)
-            estado = "íntegro e disponível" if resultado["integro"] else "ausente ou alterado"
-            messagebox.showinfo("Integridade documental", f"O arquivo está {estado}.\n\n{resultado.get('caminho') or 'Caminho indisponível'}", parent=self.root)
-        except (ValueError, PermissionError, OSError) as erro:
-            messagebox.showerror("Documentos", str(erro), parent=self.root)
 
-    def _novo_item_catalogo(self):
-        catalogos = self._catalogos()
-        self._formulario("Item de catálogo interno", (("fornecedor_id", "Fornecedor homologado", "opcoes", [(x["id"], x["razao_social"]) for x in catalogos["fornecedores"]]), ("codigo", "Código", "texto", ()), ("descricao", "Descrição", "texto", ()), ("especificacao", "Especificação", "texto", ()), ("categoria_id", "Categoria", "opcoes", [("", "Não definida")] + [(x["id"], x["nome"]) for x in catalogos["categorias"]]), ("estoque_item_id", "Item de Estoque", "opcoes", [("", "Não relacionado")] + [(x["id"], f"{x['codigo']} · {x['nome']}") for x in catalogos["itens_estoque"]]), ("unidade", "Unidade", "texto", ()), ("preco", "Preço", "texto", ()), ("prazo_dias", "Prazo em dias", "texto", ()), ("validade_preco", "Validade do preço", "texto", ())), lambda d: criar_item_catalogo(d, SESSAO.usuario), largura=740)
 
-    def _novo_contrato(self):
-        catalogos = self._catalogos()
-        self._formulario("Novo contrato de fornecedor", (("numero", "Número", "texto", ()), ("fornecedor_id", "Fornecedor", "opcoes", [(x["id"], x["razao_social"]) for x in catalogos["fornecedores"]]), ("objeto", "Objeto", "texto", ()), ("responsavel_id", "Responsável", "opcoes", [(x["id"], x["nome"]) for x in catalogos["usuarios"]]), ("departamento_id", "Departamento", "opcoes", [("", "Não definido")] + [(x["id"], x["nome"]) for x in catalogos["departamentos"]]), ("inicio", "Início", "texto", ()), ("termino", "Término", "texto", ()), ("valor", "Valor", "texto", ()), ("periodicidade", "Periodicidade", "texto", ()), ("indice_reajuste", "Índice de reajuste", "texto", ()), ("percentual_reajuste", "Percentual", "texto", ()), ("renovacao_automatica", "Renovação automática", "booleano", ()), ("prazo_cancelamento_dias", "Prazo de cancelamento", "texto", ())), lambda d: criar_contrato(d, SESSAO.usuario), largura=760)
 
-    def _novo_aditivo(self):
-        contrato = self._registro_selecionado()
-        if not contrato:
-            return
-        self._formulario("Novo aditivo", (("numero", "Número", "texto", ()), ("tipo", "Tipo", "opcoes", ("Renovação", "Reajuste", "Escopo", "Prazo", "Valor")), ("descricao", "Descrição", "texto", ()), ("valor_novo", "Novo valor", "texto", ()), ("termino_novo", "Novo término", "texto", ())), lambda d: adicionar_aditivo(contrato["id"], d, SESSAO.usuario))
 
-    def _resolver_alerta(self):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        try:
-            resolver_alerta(registro["id"], SESSAO.usuario)
-            self.abrir_secao("alertas")
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Alerta", str(erro), parent=self.root)
 
-    def _comentar(self, recurso_tipo):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        comentario = simpledialog.askstring("Comentário interno", "Comentário:", parent=self.root)
-        if not comentario:
-            return
-        try:
-            adicionar_comentario(recurso_tipo, registro["id"], comentario, SESSAO.usuario)
-            messagebox.showinfo("Compras", "Comentário registrado.", parent=self.root)
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Compras", str(erro), parent=self.root)
 
-    def _historico(self, recurso_tipo):
-        registro = self._registro_selecionado()
-        if not registro:
-            return
-        historico = listar_historico(recurso_tipo, registro["id"], SESSAO.usuario)
-        texto = "\n\n".join(f"{x['criado_em']} · {x.get('usuario_nome') or 'Sistema'}\n{x['acao']}\n{x.get('observacao') or ''}" for x in historico) or "Nenhum evento registrado."
-        messagebox.showinfo("Histórico do processo", texto, parent=self.root)
-
-    def _mostrar_analise(self):
-        try:
-            analise = analisar_compras(SESSAO.usuario)
-        except (ValueError, PermissionError) as erro:
-            messagebox.showerror("Análise de Compras", str(erro), parent=self.root)
-            return
-        texto = "RESUMO INTELIGENTE\n\n" + "\n".join(f"• {item}" for item in analise["pontos_atencao"])
-        if analise["concentracao"]:
-            texto += "\n\nCONCENTRAÇÃO\n\n" + "\n".join(f"• {x['razao_social']}: {_moeda(x['valor_centavos'])}" for x in analise["concentracao"][:5])
-        messagebox.showinfo("Inteligência de Compras", texto, parent=self.root)
-
-    def _relatorios(self):
-        self._cabecalho("Central de relatórios", "Relatórios operacionais, financeiros, de fornecedores, performance e auditoria.")
-        card = criar_card(self.conteudo); card.pack(fill="x")
-        interior = tk.Frame(card, bg=CORES["card"]); interior.pack(fill="x", padx=18, pady=18)
-        criar_titulo_secao(interior, "Gerar agora", "PDF informa explicitamente quando precisar limitar grandes volumes; Excel e CSV preservam o universo completo.")
-        for tipo in ("Solicitações", "Cotações", "Pedidos", "Fornecedores", "Recebimentos", "Divergências", "Contratos", "Auditoria"):
-            linha = tk.Frame(interior, bg=CORES["card_secundario"]); linha.pack(fill="x", pady=3)
-            tk.Label(linha, text=tipo, font=FONTES["subtitulo"], fg=CORES["text"], bg=CORES["card_secundario"]).pack(side="left", padx=12, pady=10)
-            for formato in ("PDF", "XLSX", "CSV"):
-                criar_botao(linha, formato, lambda t=tipo, f=formato: self._gerar_relatorio(t, f), tipo="fantasma", compacto=True).pack(side="right", padx=3)
-        criar_botao(interior, "AGENDAR ENVIO", self._agendar_relatorio, tipo="secundario", compacto=True).pack(anchor="e", pady=(12, 0))
-
-    def _gerar_relatorio(self, tipo, formato):
-        extensao = formato.lower()
-        destino = filedialog.asksaveasfilename(parent=self.root, title=f"Exportar {tipo}", defaultextension=f".{extensao}", filetypes=((formato, f"*.{extensao}"),))
-        if not destino:
-            return
-        try:
-            gerar_relatorio_compras(tipo, formato, destino, SESSAO.usuario)
-            messagebox.showinfo("Relatório", f"Arquivo gerado em:\n{destino}", parent=self.root)
-        except (ValueError, PermissionError, OSError) as erro:
-            messagebox.showerror("Relatório", str(erro), parent=self.root)
-
-    def _agendar_relatorio(self):
-        self._formulario("Agendar relatório", (("nome", "Nome", "texto", ()), ("tipo", "Relatório", "opcoes", ("Solicitações", "Cotações", "Pedidos", "Fornecedores", "Contratos")), ("formato", "Formato", "opcoes", ("PDF", "XLSX", "CSV")), ("frequencia", "Frequência", "texto", ()), ("proxima_execucao", "Próxima execução", "texto", ()), ("destinatarios", "Destinatários", "texto", ())), lambda d: agendar_relatorio(d, SESSAO.usuario), atualizar=False)
-
-    def _auditoria(self):
-        self._cabecalho("Auditoria de Compras", "Histórico imutável de solicitações, propostas, negociações, pedidos e recebimentos.", acoes=False)
-        self.secao = "auditoria"
-        self._secao_operacional_sem_cabecalho()
-
-    def _secao_operacional_sem_cabecalho(self):
-        self.registros = listar_secao("auditoria", SESSAO.usuario)
-        colunas = (("criado_em", "Data / hora", 155), ("usuario_nome", "Usuário", 160), ("acao", "Ação", 190), ("recurso_tipo", "Recurso", 190), ("recurso_id", "ID", 70), ("antes_json", "Antes", 300), ("depois_json", "Depois", 300), ("observacao", "Observação", 260))
-        card = criar_card(self.conteudo); card.pack(fill="both", expand=True)
-        area = tk.Frame(card, bg=CORES["input"]); area.pack(fill="both", expand=True, padx=1, pady=1)
-        self.tabela = ttk.Treeview(area, columns=[x[0] for x in colunas], show="headings", height=24, style="Dark.Treeview")
-        for chave, titulo, largura in colunas:
-            self.tabela.heading(chave, text=titulo); self.tabela.column(chave, width=largura, minwidth=60, anchor="w")
-        by = ttk.Scrollbar(area, orient="vertical", command=self.tabela.yview); bx = ttk.Scrollbar(area, orient="horizontal", command=self.tabela.xview)
-        self.tabela.configure(yscrollcommand=by.set, xscrollcommand=bx.set); area.grid_rowconfigure(0, weight=1); area.grid_columnconfigure(0, weight=1)
-        self.tabela.grid(row=0, column=0, sticky="nsew"); by.grid(row=0, column=1, sticky="ns"); bx.grid(row=1, column=0, sticky="ew")
-        adicionar_divisorias_treeview(self.tabela, cor=CORES["border"]); self.estado_vazio = criar_estado_vazio(area, "◉", "Nenhum evento de auditoria", "As operações do módulo aparecerão aqui.", cor=COR_COMPRAS); self._preencher_tabela()
-
-    def _configuracoes(self):
-        self._cabecalho("Configurações de Compras", "Alçadas, categorias, perfis, integrações e parâmetros departamentais.", acoes=False)
-        grade = GradeResponsiva(self.conteudo, max_colunas=2, largura_minima=360, gap=10, bg=CORES["bg"]); grade.pack(fill="x")
-        for titulo, descricao, comando in (
-            ("Alçadas de aprovação", "Faixas por valor, prioridade e departamento. Crie ou edite regras sem alterar decisões anteriores.", self._nova_regra),
-            ("Categorias de compra", "Classificação hierárquica para solicitações, catálogo e relatórios.", self._nova_categoria),
-            ("Permissões granulares", f"{len(ACOES_COMPRAS)} ações controláveis por perfil e usuário.", lambda: messagebox.showinfo("Compras", "Configure os perfis em Usuários e acessos.", parent=self.root)),
-            ("Integrações", "Estoque, Patrimônio, Financeiro, Documentos, Aprovações, Notificações e Analytics.", lambda: messagebox.showinfo("Compras", "As integrações internas estão ativas. APIs externas exigem credenciais homologadas.", parent=self.root)),
-        ):
-            card = criar_card(grade); tk.Label(card, text=titulo, font=FONTES["subtitulo"], fg=CORES["text"], bg=CORES["card"]).pack(anchor="w", padx=16, pady=(15, 6)); tk.Label(card, text=descricao, font=FONTES["texto"], fg=CORES["text_sec"], bg=CORES["card"], wraplength=420, justify="left").pack(anchor="w", padx=16); criar_botao(card, "ABRIR", comando, tipo="fantasma", compacto=True).pack(anchor="w", padx=16, pady=15); grade.adicionar(card)
-
-    def _nova_categoria(self):
-        self._formulario("Nova categoria de compra", (("codigo", "Código", "texto", ()), ("nome", "Nome", "texto", ()), ("descricao", "Descrição", "texto", ())), lambda d: criar_categoria(d, SESSAO.usuario), atualizar=False)
-
-    def _mostrar_regras(self):
-        regras = listar_secao("regras", SESSAO.usuario)
-        texto = "\n".join(f"{x['nivel']}. {x['nome']}: {_moeda(x['valor_minimo_centavos'])} até {_moeda(x['valor_maximo_centavos']) if x['valor_maximo_centavos'] is not None else 'sem limite'}" for x in regras)
-        messagebox.showinfo("Alçadas de Compras", texto or "Nenhuma regra cadastrada.", parent=self.root)
-
-    def _nova_regra(self):
-        catalogos = self._catalogos()
-        regras = listar_secao("regras", SESSAO.usuario)
-        identificadores = "\n".join(f"{x['id']} · {x['nome']}" for x in regras)
-        if identificadores:
-            messagebox.showinfo("Alçadas atuais", identificadores, parent=self.root)
-        self._formulario("Configurar alçada de aprovação", (
-            ("id", "ID para editar (vazio = nova)", "texto", ()),
-            ("nome", "Nome da alçada", "texto", ()),
-            ("valor_minimo", "Valor mínimo", "texto", ()),
-            ("valor_maximo", "Valor máximo (vazio = ilimitado)", "texto", ()),
-            ("prioridade", "Prioridade específica", "opcoes", ("", "Baixa", "Normal", "Alta", "Urgente", "Crítica")),
-            ("departamento_id", "Departamento", "opcoes", [("", "Todos")] + [(x["id"], x["nome"]) for x in catalogos["departamentos"]]),
-            ("nivel", "Nível", "texto", ()),
-            ("exige_financeiro", "Exige Financeiro", "booleano", ()),
-            ("exige_diretor", "Exige Diretoria", "booleano", ()),
-        ), lambda d: salvar_regra_aprovacao(d, SESSAO.usuario), atualizar=False)

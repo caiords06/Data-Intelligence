@@ -1,4 +1,4 @@
-"""Repositório SQLite do histórico resumido de análises."""
+"""Repositório central do histórico resumido de análises."""
 
 from __future__ import annotations
 
@@ -7,25 +7,28 @@ from pathlib import Path
 
 import pandas as pd
 
-from auth.banco import conectar, registrar_auditoria
+from auth.banco import backend_banco, conectar, registrar_auditoria
 from auth.sessao import SESSAO
 from enterprise.contexto import garantir_contexto_sessao
 
 
-def _contexto_historico() -> tuple[int | None, int | None]:
-    """Retorna o contexto ativo sem quebrar bases legadas sem Enterprise Core.
-
-    A interface sempre trabalha com uma sessão autenticada e, nesse caso, o
-    isolamento por empresa/filial continua obrigatório. A alternativa ``NULL``
-    existe somente para migrações, testes e registros criados antes do suporte
-    multiempresa.
-    """
+def _contexto_historico(ator: dict | None = None) -> tuple[int | None, int | None]:
+    """Resolve empresa/filial tanto no servidor RPC quanto no modo de teste legado."""
+    if ator and ator.get("_empresa_id") is not None:
+        return int(ator["_empresa_id"]), (
+            int(ator["_filial_id"]) if ator.get("_filial_id") is not None else None
+        )
     if SESSAO.usuario is None:
         return None, None
     return garantir_contexto_sessao()
 
 
 def inicializar_historico() -> None:
+    if backend_banco() == "postgresql":
+        # O bootstrap também aplica extensões idempotentes em bancos V10.1 já existentes.
+        from enterprise.postgresql.bootstrap import inicializar_schema_postgresql
+        inicializar_schema_postgresql()
+        return
     with conectar() as conexao:
         conexao.execute(
             """
@@ -47,21 +50,15 @@ def inicializar_historico() -> None:
         )
         colunas = {
             item["name"]
-            for item in conexao.execute(
-                "PRAGMA table_info(historico_analises)"
-            ).fetchall()
+            for item in conexao.execute("PRAGMA table_info(historico_analises)").fetchall()
         }
         for nome, definicao in (
-            ("empresa_id", "INTEGER"),
-            ("filial_id", "INTEGER"),
+            ("empresa_id", "INTEGER"), ("filial_id", "INTEGER"),
             ("estado_registro", "TEXT NOT NULL DEFAULT 'Ativo'"),
-            ("excluido_em", "TEXT"),
-            ("excluido_por", "INTEGER"),
+            ("excluido_em", "TEXT"), ("excluido_por", "INTEGER"),
         ):
             if nome not in colunas:
-                conexao.execute(
-                    f"ALTER TABLE historico_analises ADD COLUMN {nome} {definicao}"
-                )
+                conexao.execute(f"ALTER TABLE historico_analises ADD COLUMN {nome} {definicao}")
 
 
 def _json_seguro(valor):
@@ -81,12 +78,19 @@ def _json_seguro(valor):
 
 def registrar_analise(
     resultado: dict,
-    usuario_id: int,
+    usuario_id: int | None = None,
     *,
     empresa_id: int | None = None,
     filial_id: int | None = None,
+    ator: dict | None = None,
 ) -> int:
     inicializar_historico()
+    if ator and ator.get("id") is not None:
+        usuario_id = int(ator["id"])
+    elif usuario_id is None and SESSAO.usuario and SESSAO.usuario.get("id") is not None:
+        usuario_id = int(SESSAO.usuario["id"])
+    if usuario_id is None:
+        raise PermissionError("Usuário autenticado é obrigatório para registrar o histórico.")
     df = resultado.get("dataframe")
     total_registros = int(len(df)) if isinstance(df, pd.DataFrame) else 0
     total_colunas = int(len(df.columns)) if isinstance(df, pd.DataFrame) else 0
@@ -114,7 +118,9 @@ def registrar_analise(
     }
     configuracao = resultado.get("configuracao") or {}
     if empresa_id is None:
-        if SESSAO.empresa_id is not None:
+        if ator and ator.get("_empresa_id") is not None:
+            empresa_id, filial_id = _contexto_historico(ator)
+        elif SESSAO.empresa_id is not None:
             empresa_id, filial_id = SESSAO.empresa_id, SESSAO.filial_id
         else:
             try:
@@ -150,6 +156,7 @@ def registrar_analise(
         "analise_concluida",
         usuario_id=int(usuario_id),
         detalhes=f"historico_id={historico_id};categoria={resultado.get('categoria')}",
+        empresa_id=empresa_id, filial_id=filial_id,
     )
     return historico_id
 
@@ -157,7 +164,7 @@ def registrar_analise(
 def listar_historico(ator: dict, limite: int = 200) -> list[dict]:
     inicializar_historico()
     limite = max(1, min(int(limite), 1000))
-    empresa_id, filial_id = _contexto_historico()
+    empresa_id, filial_id = _contexto_historico(ator)
     with conectar() as conexao:
         if empresa_id is None:
             restricao_dono = "" if ator.get("perfil") == "admin" else "AND h.usuario_id = ?"
@@ -204,7 +211,7 @@ def listar_historico(ator: dict, limite: int = 200) -> list[dict]:
 
 def obter_analise(historico_id: int, ator: dict) -> dict:
     inicializar_historico()
-    empresa_id, filial_id = _contexto_historico()
+    empresa_id, filial_id = _contexto_historico(ator)
     with conectar() as conexao:
         if empresa_id is None:
             registro = conexao.execute(
@@ -250,6 +257,7 @@ def excluir_analise(historico_id: int, ator: dict) -> None:
         "historico_excluido",
         usuario_id=int(ator["id"]),
         detalhes=f"historico_id={historico_id};dono={registro['usuario_id']}",
+        empresa_id=registro.get("empresa_id"), filial_id=registro.get("filial_id"),
     )
 
 
@@ -286,5 +294,13 @@ def excluir_analises(historico_ids, ator: dict) -> int:
             f"quantidade={quantidade};ids={','.join(str(item) for item in ids)};"
             f"donos={','.join(str(item['usuario_id']) for item in registros)}"
         ),
+        empresa_id=(registros[0].get("empresa_id") if registros else None),
+        filial_id=(registros[0].get("filial_id") if registros else None),
     )
     return quantidade
+
+
+# Central/Cliente consultam e alteram histórico somente no Servidor Corporativo.
+from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
+_instalar_proxy_modulo(globals(), __name__)
+del _instalar_proxy_modulo

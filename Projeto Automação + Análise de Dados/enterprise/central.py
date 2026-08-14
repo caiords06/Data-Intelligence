@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from auth.banco import conectar, registrar_auditoria
 from enterprise.catalogo import MODULOS
 from enterprise.contexto import (
@@ -311,6 +313,13 @@ def resumo_cockpit(ator: dict) -> dict:
         try:
             resumos[modulo] = calcular_resumo_modulo(modulo, ator)
         except (PermissionError, ValueError):
+            continue
+        except Exception:
+            # Um módulo com erro não deve impedir o acesso ao cockpit inteiro.
+            # O traceback permanece no log do Servidor Corporativo para diagnóstico.
+            logging.getLogger("data_intelligence.corporate_server").exception(
+                "Falha ao calcular resumo do módulo %s", modulo
+            )
             continue
     notificacoes = listar_notificacoes(ator, limite=8, somente_nao_lidas=True)
     atividades = listar_atividades(ator, limite=10)

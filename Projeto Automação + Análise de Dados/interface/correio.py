@@ -5,9 +5,10 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
+import logging
 
 from auth.sessao import SESSAO
-from enterprise.correio import (
+from services.correio import (
     atualizar_estado,
     contagem_nao_lidas,
     enviar_mensagem,
@@ -72,7 +73,7 @@ class TelaCorreio:
         self.busca = tk.StringVar()
         entrada = tk.Entry(
             barra, textvariable=self.busca, bg=CORES["input"], fg=CORES["text"],
-            insertbackground=CORES["primary"], relief="flat", font=("Segoe UI", 9),
+            insertbackground=CORES["primary"], relief="flat", font=("Inter", 9),
         )
         entrada.pack(side="right", fill="x", expand=True, padx=(18, 0), ipady=7)
         entrada.bind("<Return>", lambda _e: self.carregar())
@@ -93,11 +94,11 @@ class TelaCorreio:
         lista_frame.grid(row=0, column=1, sticky="nsew", padx=(0, 8))
         lista_frame.grid_rowconfigure(1, weight=1)
         lista_frame.grid_columnconfigure(0, weight=1)
-        self.rotulo_caixa = tk.Label(lista_frame, text="", bg=CORES["card"], fg=CORES["text"], font=("Segoe UI", 10, "bold"), anchor="w")
+        self.rotulo_caixa = tk.Label(lista_frame, text="", bg=CORES["card"], fg=CORES["text"], font=("Inter", 10, "bold"), anchor="w")
         self.rotulo_caixa.grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 8))
         self.lista = tk.Listbox(
             lista_frame, bg=CORES["input"], fg=CORES["text"], selectbackground=CORES["sidebar_ativo"],
-            selectforeground=CORES["text"], relief="flat", borderwidth=0, activestyle="none", font=("Segoe UI", 9)
+            selectforeground=CORES["text"], relief="flat", borderwidth=0, activestyle="none", font=("Inter", 9)
         )
         y = ttk.Scrollbar(lista_frame, orient="vertical", command=self.lista.yview, style="Dark.Vertical.TScrollbar")
         self.lista.configure(yscrollcommand=y.set)
@@ -112,12 +113,12 @@ class TelaCorreio:
     def _render_pastas(self):
         for w in self.pastas.winfo_children():
             w.destroy()
-        tk.Label(self.pastas, text="PASTAS", bg=CORES["card"], fg=CORES["text_muted"], font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=14, pady=(14, 8))
+        tk.Label(self.pastas, text="PASTAS", bg=CORES["card"], fg=CORES["text_muted"], font=("Inter", 8, "bold")).pack(anchor="w", padx=14, pady=(14, 8))
         nao_lidas = 0
         try:
             nao_lidas = contagem_nao_lidas(SESSAO.usuario)
         except Exception:
-            pass
+            logging.getLogger(__name__).exception("Não foi possível obter a contagem de mensagens não lidas")
         for chave, icone, titulo in CAIXAS:
             texto = f"{icone}  {titulo}"
             if chave == "entrada" and nao_lidas:
@@ -127,7 +128,7 @@ class TelaCorreio:
                 bg=CORES["sidebar_ativo"] if chave == self.caixa else CORES["card"],
                 fg=CORES["text"] if chave == self.caixa else CORES["text_sec"],
                 activebackground=CORES["card_hover"], activeforeground=CORES["text"],
-                font=("Segoe UI", 9, "bold" if chave == self.caixa else "normal"),
+                font=("Inter", 9, "bold" if chave == self.caixa else "normal"),
                 cursor="hand2", command=lambda c=chave: self._trocar_caixa(c), padx=12, pady=8,
             ).pack(fill="x", padx=8, pady=2)
 
@@ -159,11 +160,11 @@ class TelaCorreio:
             w.destroy()
         tk.Label(
             self.preview, text="Selecione uma mensagem", bg=CORES["card"], fg=CORES["text_sec"],
-            font=("Segoe UI", 15, "bold")
+            font=("Inter", 15, "bold")
         ).pack(anchor="center", pady=(90, 6))
         tk.Label(
             self.preview, text="O conteúdo aparecerá aqui sem abrir outra janela.", bg=CORES["card"], fg=CORES["text_muted"],
-            font=("Segoe UI", 9)
+            font=("Inter", 9)
         ).pack(anchor="center")
 
     def _selecionar(self, _evento=None):
@@ -185,24 +186,24 @@ class TelaCorreio:
         m = self.mensagem_atual or {}
         topo = tk.Frame(self.preview, bg=CORES["card"])
         topo.pack(fill="x", padx=20, pady=(18, 8))
-        tk.Label(topo, text=m.get("assunto") or "(sem assunto)", bg=CORES["card"], fg=CORES["text"], font=("Segoe UI", 16, "bold"), wraplength=650, justify="left").pack(anchor="w")
-        tk.Label(topo, text=f"De: {m.get('remetente_nome','—')} <{m.get('remetente_email','—')}>", bg=CORES["card"], fg=CORES["text_sec"], font=("Segoe UI", 9)).pack(anchor="w", pady=(6, 0))
+        tk.Label(topo, text=m.get("assunto") or "(sem assunto)", bg=CORES["card"], fg=CORES["text"], font=("Inter", 16, "bold"), wraplength=650, justify="left").pack(anchor="w")
+        tk.Label(topo, text=f"De: {m.get('remetente_nome','—')} <{m.get('remetente_email','—')}>", bg=CORES["card"], fg=CORES["text_sec"], font=("Inter", 9)).pack(anchor="w", pady=(6, 0))
         dests = ", ".join(x.get("email_corporativo") or "" for x in m.get("destinatarios", []) if x.get("tipo") == "PARA")
-        tk.Label(topo, text=f"Para: {dests or '—'}", bg=CORES["card"], fg=CORES["text_muted"], font=("Segoe UI", 8), wraplength=680, justify="left").pack(anchor="w")
+        tk.Label(topo, text=f"Para: {dests or '—'}", bg=CORES["card"], fg=CORES["text_muted"], font=("Inter", 8), wraplength=680, justify="left").pack(anchor="w")
         if m.get("modulo_origem"):
-            tk.Label(topo, text=f"Contexto: {m['modulo_origem']}", bg=CORES["card"], fg=CORES["primary"], font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(3, 0))
+            tk.Label(topo, text=f"Contexto: {m['modulo_origem']}", bg=CORES["card"], fg=CORES["primary"], font=("Inter", 8, "bold")).pack(anchor="w", pady=(3, 0))
         acoes = tk.Frame(self.preview, bg=CORES["card"])
         acoes.pack(fill="x", padx=20, pady=(0, 8))
         if self.caixa not in {"enviados", "rascunhos"}:
             criar_botao(acoes, "RESPONDER", lambda: self.compor(responder=m), tipo="secundario", compacto=True).pack(side="left")
             criar_botao(acoes, "ARQUIVAR", lambda: self._estado(arquivada=True), tipo="fantasma", compacto=True).pack(side="left", padx=6)
             criar_botao(acoes, "LIXEIRA", lambda: self._estado(excluida=True), tipo="perigo", compacto=True).pack(side="left")
-        corpo = tk.Text(self.preview, bg=CORES["input"], fg=CORES["text"], insertbackground=CORES["primary"], relief="flat", wrap="word", font=("Segoe UI", 10), padx=14, pady=14)
+        corpo = tk.Text(self.preview, bg=CORES["input"], fg=CORES["text"], insertbackground=CORES["primary"], relief="flat", wrap="word", font=("Inter", 10), padx=14, pady=14)
         corpo.pack(fill="both", expand=True, padx=20, pady=(0, 14))
         corpo.insert("1.0", m.get("corpo") or "")
         corpo.configure(state="disabled")
         if m.get("anexos"):
-            tk.Label(self.preview, text="Anexos: " + " · ".join(a["nome"] for a in m["anexos"]), bg=CORES["card"], fg=CORES["text_sec"], font=("Segoe UI", 8)).pack(anchor="w", padx=20, pady=(0, 12))
+            tk.Label(self.preview, text="Anexos: " + " · ".join(a["nome"] for a in m["anexos"]), bg=CORES["card"], fg=CORES["text_sec"], font=("Inter", 8)).pack(anchor="w", padx=20, pady=(0, 12))
 
     def _estado(self, **kwargs):
         if not self.mensagem_atual:
@@ -221,11 +222,11 @@ class TelaCorreio:
         janela.configure(bg=CORES["bg"])
         painel = tk.Frame(janela, bg=CORES["card"], highlightthickness=1, highlightbackground=CORES["border"])
         painel.pack(fill="both", expand=True, padx=18, pady=18)
-        tk.Label(painel, text="NOVA MENSAGEM", bg=CORES["card"], fg=CORES["primary"], font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
+        tk.Label(painel, text="NOVA MENSAGEM", bg=CORES["card"], fg=CORES["primary"], font=("Inter", 9, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
 
         def campo(rotulo, valor=""):
-            tk.Label(painel, text=rotulo, bg=CORES["card"], fg=CORES["text_sec"], font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=18, pady=(6, 3))
-            e=tk.Entry(painel,bg=CORES["input"],fg=CORES["text"],insertbackground=CORES["primary"],relief="flat",font=("Segoe UI",9))
+            tk.Label(painel, text=rotulo, bg=CORES["card"], fg=CORES["text_sec"], font=("Inter", 8, "bold")).pack(anchor="w", padx=18, pady=(6, 3))
+            e=tk.Entry(painel,bg=CORES["input"],fg=CORES["text"],insertbackground=CORES["primary"],relief="flat",font=("Inter",9))
             e.pack(fill="x", padx=18, ipady=6); e.insert(0,valor); return e
 
         para_val=""
@@ -242,12 +243,12 @@ class TelaCorreio:
         para=campo("PARA",para_val)
         cc=campo("CC")
         assunto=campo("ASSUNTO",assunto_val)
-        tk.Label(painel,text="MENSAGEM",bg=CORES["card"],fg=CORES["text_sec"],font=("Segoe UI",8,"bold")).pack(anchor="w",padx=18,pady=(8,3))
-        corpo=tk.Text(painel,bg=CORES["input"],fg=CORES["text"],insertbackground=CORES["primary"],relief="flat",wrap="word",font=("Segoe UI",10),height=12,padx=10,pady=8)
+        tk.Label(painel,text="MENSAGEM",bg=CORES["card"],fg=CORES["text_sec"],font=("Inter",8,"bold")).pack(anchor="w",padx=18,pady=(8,3))
+        corpo=tk.Text(painel,bg=CORES["input"],fg=CORES["text"],insertbackground=CORES["primary"],relief="flat",wrap="word",font=("Inter",10),height=12,padx=10,pady=8)
         corpo.pack(fill="both",expand=True,padx=18)
         corpo.insert("1.0",corpo_inicial)
         anexos=[]
-        label_anexos=tk.Label(painel,text="Nenhum anexo",bg=CORES["card"],fg=CORES["text_muted"],font=("Segoe UI",8))
+        label_anexos=tk.Label(painel,text="Nenhum anexo",bg=CORES["card"],fg=CORES["text_muted"],font=("Inter",8))
         label_anexos.pack(anchor="w",padx=18,pady=(6,0))
         botoes=tk.Frame(painel,bg=CORES["card"]); botoes.pack(fill="x",padx=18,pady=14)
 

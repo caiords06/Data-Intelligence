@@ -446,6 +446,37 @@ def consultar_dados_para_analytics(
         else:
             dataframe.attrs["amostra_explicita"] = False
         return dataframe
+    if modulo == "marketing":
+        from enterprise.marketing import exportar_dataframe_marketing
+
+        dataframe = exportar_dataframe_marketing(ator)
+        if dataframe.empty:
+            raise ValueError("Marketing ainda não possui campanhas para análise.")
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        return dataframe
+    if modulo in {"comercial", "administrativo", "juridico"}:
+        if modulo == "comercial":
+            from enterprise.comercial import exportar_dataframe_comercial as exportar
+            vazio = "Comercial ainda não possui oportunidades para análise."
+        elif modulo == "administrativo":
+            from enterprise.administrativo import exportar_dataframe_administrativo as exportar
+            vazio = "Administrativo ainda não possui solicitações para análise."
+        else:
+            from enterprise.juridico import exportar_dataframe_juridico as exportar
+            vazio = "Jurídico ainda não possui processos para análise."
+        dataframe = exportar(ator)
+        if dataframe.empty:
+            raise ValueError(vazio)
+        if limite_explicito is not None:
+            dataframe = dataframe.head(max(1, int(limite_explicito))).copy()
+            dataframe.attrs["amostra_explicita"] = True
+        else:
+            dataframe.attrs["amostra_explicita"] = False
+        return dataframe
     if modulo == "rh":
         from enterprise.rh import exportar_dataframe_rh
 
@@ -785,18 +816,14 @@ def calcular_resumo_modulo(modulo: str, ator: dict) -> dict:
             ).fetchone()["total"]
             cards = (("CHAMADOS", linha["total"], "inteiro"), ("ABERTOS", linha["abertos"], "inteiro"), ("CRÍTICOS", linha["criticos"], "inteiro"), ("ATIVOS TI", ativos, "inteiro"))
         elif modulo == "marketing":
-            linha = conexao.execute(
-                """
-                SELECT COALESCE(SUM(investimento_centavos),0) / 100.0 investimento,
-                       COALESCE(SUM(leads),0) leads,
-                       COALESCE(SUM(conversoes),0) conversoes,
-                       COALESCE(SUM(receita_centavos),0) / 100.0 receita
-                FROM campanhas_marketing WHERE empresa_id = ? AND filial_id = ?
-                  AND estado_registro = 'Ativo'
-                """,
-                (empresa_id, filial_id),
-            ).fetchone()
-            cards = (("INVESTIMENTO", linha["investimento"], "moeda"), ("LEADS", linha["leads"], "inteiro"), ("CONVERSÕES", linha["conversoes"], "inteiro"), ("RECEITA", linha["receita"], "moeda"))
+            from enterprise.marketing import resumo_marketing
+            resumo = resumo_marketing(ator)
+            cards = (
+                ("INVESTIMENTO", resumo["investimento_centavos"] / 100, "moeda"),
+                ("LEADS", resumo["leads"], "inteiro"),
+                ("MQLS", resumo["mqls"], "inteiro"),
+                ("ROAS", resumo["roas"], "decimal"),
+            )
         elif modulo == "administrativo":
             linha = conexao.execute(
                 """

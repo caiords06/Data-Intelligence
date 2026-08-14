@@ -1,3 +1,5 @@
+> **DOCUMENTO HISTÓRICO.** Esta documentação descreve arquitetura anterior à linha final Server First. Para novas instalações, use `docs/README.md`.
+
 # Data Intelligence Enterprise Platform V9.0
 
 ## Reestruturação corporativa, módulos por objetivo, correio interno e servidor corporativo

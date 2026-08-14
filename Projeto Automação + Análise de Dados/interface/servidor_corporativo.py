@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 
 from auth.sessao import SESSAO
 from core.nodo import carregar_config_nodo, usa_servidor_remoto
-from enterprise.servidor_cliente import excluir_item_servidor, listar_arquivos_servidor, testar_servidor
+from services.servidor_cliente import excluir_item_servidor, listar_arquivos_servidor, testar_servidor
 from interface.componentes import preparar_janela_secundaria
 from interface.tema import CORES, configurar_estilos_ttk
 
@@ -27,9 +27,9 @@ class JanelaServidorCorporativo:
 
     def _montar(self):
         top=tk.Frame(self.janela,bg=CORES["bg"]); top.pack(fill="x",padx=24,pady=(22,12))
-        tk.Label(top,text="Servidor corporativo",font=("Segoe UI",20,"bold"),fg=CORES["text"],bg=CORES["bg"]).pack(anchor="w")
+        tk.Label(top,text="Servidor corporativo",font=("Inter",20,"bold"),fg=CORES["text"],bg=CORES["bg"]).pack(anchor="w")
         cfg=carregar_config_nodo()
-        self.status=tk.Label(top,text=f"{cfg.servidor_url} · verificando...",font=("Segoe UI",9),fg=CORES["text_sec"],bg=CORES["bg"]); self.status.pack(anchor="w",pady=(4,0))
+        self.status=tk.Label(top,text=f"{cfg.servidor_url} · verificando...",font=("Inter",9),fg=CORES["text_sec"],bg=CORES["bg"]); self.status.pack(anchor="w",pady=(4,0))
         actions=tk.Frame(self.janela,bg=CORES["bg"]); actions.pack(fill="x",padx=24,pady=(0,10))
         for nome in ("Arquivos","Backups"):
             tk.Radiobutton(actions,text=nome,variable=self.tipo,value=nome,command=self.atualizar,indicatoron=False,bg=CORES["card_secundario"],fg=CORES["text"],selectcolor=CORES["primary"],activebackground=CORES["card_hover"],activeforeground=CORES["text"],bd=0,padx=14,pady=7).pack(side="left",padx=(0,6))

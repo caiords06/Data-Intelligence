@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from core.caminhos import pasta_dados
+from core.caminhos import executando_empacotado, pasta_dados
 
 PAPEIS = {"standalone", "central", "cliente", "servidor"}
 
@@ -82,9 +82,24 @@ def carregar_config_nodo() -> ConfigNodo:
         ).validar()
     caminho = caminho_config_nodo()
     if not caminho.is_file():
+        # Em desenvolvimento o modo standalone continua útil. Um executável
+        # distribuído, porém, jamais deve virar autoridade local por acidente:
+        # ausência de node.json após uma instalação parcial deve falhar fechado.
+        permitir_standalone = str(
+            os.environ.get("DATA_INTELLIGENCE_ALLOW_STANDALONE", "")
+        ).strip().lower() in {"1", "true", "yes", "sim"}
+        if not permitir_standalone:
+            raise ValueError(
+                f"Configuração do nó ausente em {caminho}. "
+                "A estação não pode assumir modo local automaticamente. Configure-a como Central/Cliente "
+                "apontando para o Servidor Corporativo. Para desenvolvimento isolado, habilite "
+                "DATA_INTELLIGENCE_ALLOW_STANDALONE=1 explicitamente."
+            )
         return ConfigNodo()
     try:
-        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        # utf-8-sig aceita tanto UTF-8 puro quanto arquivos gravados com BOM por
+        # algumas versões do Windows PowerShell.
+        dados = json.loads(caminho.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Configuração do nó inválida em {caminho}.") from exc
     if not isinstance(dados, dict):

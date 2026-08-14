@@ -10,11 +10,12 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from auth.sessao import SESSAO
-from enterprise.catalogo import obter_modulo
-from enterprise.contexto import tem_permissao
-from enterprise.recursos import alterar_estado_recurso, atualizar_recurso, criar_recurso, listar_recursos
+from services.catalogo import obter_modulo
+from services.contexto import tem_permissao
+from services.recursos import alterar_estado_recurso, atualizar_recurso, criar_recurso, listar_recursos
 from interface.componentes import AreaRolavel, GradeResponsiva, criar_botao, criar_cabecalho, criar_card, criar_chip, criar_sidebar, preparar_janela_secundaria
 from interface.configuracao_modulos_ui import PAINEIS_MODULOS, obter_esquema_recurso
+from interface.navegacao_modulos import criar_sidebar_modulo
 from interface.tema import CORES, FONTES, LAYOUT, configurar_estilos_ttk
 
 
@@ -71,15 +72,20 @@ class TelaOperacaoVisual:
 
     def _criar(self):
         configurar_estilos_ttk(self.root)
-        itens = [(ch, ic, tit, lambda d=ch: self.navegacao["secao_modulo"](self.modulo, d)) for ch,ic,tit in self.ui["menu"]]
-        itens.append(("correio", "✉", "Correio interno", lambda: self.navegacao["correio"](self.modulo)))
-        criar_sidebar(self.container, self.navegacao, ativo=self.secao, itens_customizados=tuple(itens), titulo_customizado=self.modulo_config["nome"].upper(), rodape_texto="Voltar aos módulos", rodape_comando=self.navegacao.get("modulos"))
+        criar_sidebar_modulo(
+            self.container, self.navegacao, modulo=self.modulo,
+            titulo=self.modulo_config["nome"].upper(), ativo=self.secao,
+            itens_menu=self.ui["menu"],
+        )
         viewport=AreaRolavel(self.container); viewport.pack(side="left",fill="both",expand=True,padx=LAYOUT["conteudo_padx"],pady=(22,20)); area=viewport.conteudo
         titulo = TITULOS_OPERACIONAIS.get(self.modulo, {}).get(self.secao, self.secao.replace("_"," ").title())
         criar_cabecalho(area, titulo, "Workspace operacional orientado ao objetivo do processo, sem aparência de planilha.", breadcrumb=f"MÓDULOS / {self.modulo_config['nome'].upper()} / {titulo.upper()}", etiqueta="OPERAÇÃO VISUAL")
         topo=tk.Frame(area,bg=CORES["bg"]); topo.pack(fill="x",pady=(0,12))
         self.pesquisa=tk.StringVar(); e=tk.Entry(topo,textvariable=self.pesquisa,bg=CORES["input"],fg=CORES["text"],insertbackground=self.cor,relief="flat"); e.pack(side="left",fill="x",expand=True,ipady=8); e.bind("<Return>",lambda _e:self._carregar(area_cards))
         criar_botao(topo,"PESQUISAR",lambda:self._carregar(area_cards),tipo="fantasma",compacto=True).pack(side="left",padx=6)
+        self.estado=tk.StringVar(value="Ativo")
+        seletor=ttk.Combobox(topo,textvariable=self.estado,values=("Ativo","Arquivado","Lixeira"),state="readonly",width=12,style="Dark.TCombobox")
+        seletor.pack(side="left",padx=(0,8)); seletor.bind("<<ComboboxSelected>>",lambda _e:self._carregar(area_cards))
         criar_botao(topo,"+ NOVO",lambda:self._formulario(),compacto=True).pack(side="right")
         area_cards=GradeResponsiva(area,max_colunas=3,largura_minima=280,gap=10,bg=CORES["bg"]); area_cards.pack(fill="both",expand=True); self.area_cards=area_cards
         self._carregar(area_cards)
@@ -88,7 +94,7 @@ class TelaOperacaoVisual:
         parent=parent or self.area_cards
         for w in list(parent.winfo_children()): w.destroy()
         try:
-            resultado=listar_recursos(self.modulo,self.secao,SESSAO.usuario,tamanho=200,pesquisa=self.pesquisa.get() if hasattr(self,"pesquisa") else "",estado="Ativo")
+            resultado=listar_recursos(self.modulo,self.secao,SESSAO.usuario,tamanho=200,pesquisa=self.pesquisa.get() if hasattr(self,"pesquisa") else "",estado=self.estado.get() if hasattr(self,"estado") else "Ativo")
         except (ValueError,PermissionError) as erro:
             messagebox.showerror("Operação",str(erro),parent=self.root); return
         registros=resultado["registros"]
@@ -100,7 +106,7 @@ class TelaOperacaoVisual:
     def _card(self,parent,registro):
         card=criar_card(parent); parent.adicionar(card); tk.Frame(card,bg=self.cor,height=3).pack(fill="x")
         status=str(registro.get("status") or "Pendente"); criar_chip(card,status,cor=self.cor).pack(anchor="e",padx=13,pady=(10,0))
-        tk.Label(card,text=str(registro.get("identificacao") or "Sem identificação"),font=("Segoe UI",11,"bold"),fg=CORES["text"],bg=CORES["card"],wraplength=260,justify="left").pack(anchor="w",padx=16,pady=(2,8))
+        tk.Label(card,text=str(registro.get("identificacao") or "Sem identificação"),font=("Inter",11,"bold"),fg=CORES["text"],bg=CORES["card"],wraplength=260,justify="left").pack(anchor="w",padx=16,pady=(2,8))
         exibidos=0
         for campo in self.esquema[1:]:
             chave,rotulo=campo[0],campo[1]; valor=_valor(registro,chave)
@@ -109,8 +115,15 @@ class TelaOperacaoVisual:
             exibidos += 1
             if exibidos>=4: break
         rod=tk.Frame(card,bg=CORES["card"]); rod.pack(fill="x",padx=12,pady=13)
-        criar_botao(rod,"EDITAR",lambda r=registro:self._formulario(r),tipo="fantasma",compacto=True).pack(side="left")
-        criar_botao(rod,"ARQUIVAR",lambda r=registro:self._arquivar(r),tipo="fantasma",compacto=True).pack(side="right")
+        estado=str(registro.get("estado_registro") or "Ativo")
+        if estado == "Ativo":
+            criar_botao(rod,"EDITAR",lambda r=registro:self._formulario(r),tipo="fantasma",compacto=True).pack(side="left")
+            criar_botao(rod,"REMOVER",lambda r=registro:self._alterar_estado(r,"Lixeira"),tipo="perigo",compacto=True).pack(side="right")
+            criar_botao(rod,"ARQUIVAR",lambda r=registro:self._alterar_estado(r,"Arquivado"),tipo="fantasma",compacto=True).pack(side="right",padx=5)
+        else:
+            criar_botao(rod,"RESTAURAR",lambda r=registro:self._alterar_estado(r,"Ativo"),tipo="sucesso",compacto=True).pack(side="right")
+            if estado == "Arquivado":
+                criar_botao(rod,"REMOVER",lambda r=registro:self._alterar_estado(r,"Lixeira"),tipo="perigo",compacto=True).pack(side="right",padx=5)
 
     def _formulario(self, registro=None):
         if not tem_permissao(SESSAO.usuario,self.modulo,"escrever"):
@@ -118,7 +131,7 @@ class TelaOperacaoVisual:
         j=tk.Toplevel(self.root); j.title("Editar" if registro else "Novo registro"); j.configure(bg=CORES["bg"]); preparar_janela_secundaria(j,self.root,680,650,minimo=(580,460),modal=True)
         area=AreaRolavel(j); area.pack(fill="both",expand=True,padx=20,pady=20); vars={}; dados_antigos=(registro or {}).get("dados") or {}
         for campo in self.esquema:
-            chave,rotulo,tipo,*cfg=campo; tk.Label(area.conteudo,text=rotulo.upper(),font=("Segoe UI",8,"bold"),fg=CORES["text_sec"],bg=CORES["bg"]).pack(anchor="w",pady=(10,4))
+            chave,rotulo,tipo,*cfg=campo; tk.Label(area.conteudo,text=rotulo.upper(),font=("Inter",8,"bold"),fg=CORES["text_sec"],bg=CORES["bg"]).pack(anchor="w",pady=(10,4))
             inicial=dados_antigos.get(chave, _valor(registro or {},chave) or "")
             var=tk.StringVar(value=str(inicial)); vars[chave]=var
             if tipo in {"opcoes","combo"} and cfg:
@@ -136,7 +149,14 @@ class TelaOperacaoVisual:
             j.destroy(); self._carregar()
         criar_botao(area.conteudo,"SALVAR",salvar).pack(anchor="e",pady=18)
 
-    def _arquivar(self,registro):
-        try: alterar_estado_recurso(self.modulo,self.secao,int(registro["id"]),"Arquivado",SESSAO.usuario)
-        except (ValueError,PermissionError) as erro: messagebox.showerror("Arquivar",str(erro),parent=self.root); return
+    def _alterar_estado(self,registro,estado):
+        verbo = "remover" if estado == "Lixeira" else "arquivar" if estado == "Arquivado" else "restaurar"
+        if not messagebox.askyesno(
+            "Confirmar alteração",
+            f"Deseja {verbo} este registro? A operação ficará auditada.",
+            parent=self.root,
+        ):
+            return
+        try: alterar_estado_recurso(self.modulo,self.secao,int(registro["id"]),estado,SESSAO.usuario)
+        except (ValueError,PermissionError) as erro: messagebox.showerror("Alterar registro",str(erro),parent=self.root); return
         self._carregar()

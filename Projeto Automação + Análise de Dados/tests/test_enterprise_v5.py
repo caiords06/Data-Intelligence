@@ -78,7 +78,7 @@ class EnterpriseV5Tests(unittest.TestCase):
         )
         self.assertTrue(tem_permissao(usuario, "rh", "escrever"))
         self.assertFalse(tem_permissao(usuario, "financeiro", "ler"))
-        self.assertTrue(tem_permissao(usuario, "analytics", "ler"))
+        self.assertFalse(tem_permissao(usuario, "analytics", "ler"))
 
     def test_modulos_geram_indicadores_atividades_e_alertas(self):
         admin = self._ambiente()

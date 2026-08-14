@@ -1,2 +1,2 @@
-# Runtime travado do Agente TI V9.3.
+# Runtime travado do Agente TI V11.1.0.
 psutil==7.2.2

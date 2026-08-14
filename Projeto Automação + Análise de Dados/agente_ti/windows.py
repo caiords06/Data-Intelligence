@@ -1,29 +1,21 @@
 """Instalação operacional do executável do agente pelo Agendador do Windows."""
-
 from __future__ import annotations
 
-import ctypes
 import os
 from pathlib import Path
 import subprocess
 import sys
 
+from core.windows_tasks import (
+    consultar_tarefa as _consultar,
+    eh_administrador,
+    exigir_windows,
+    iniciar_tarefa as _iniciar,
+    registrar_tarefa_boot_system,
+    remover_tarefa as _remover,
+)
 
 NOME_TAREFA = "DataIntelligence-TIAgent"
-
-
-def exigir_windows() -> None:
-    if os.name != "nt":
-        raise OSError("Esta operação está disponível apenas no Windows.")
-
-
-def eh_administrador() -> bool:
-    if os.name != "nt":
-        return False
-    try:
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except OSError:
-        return False
 
 
 def proteger_diretorio(caminho: str | Path) -> None:
@@ -58,45 +50,36 @@ def instalar_tarefa(executavel: str | Path, config_path: str | Path) -> None:
     exigir_windows()
     if not eh_administrador():
         raise PermissionError("Execute o instalador do agente como administrador.")
-    comando = _comando_tarefa(executavel, config_path)
-    subprocess.run(
-        [
-            "schtasks.exe", "/Create", "/TN", NOME_TAREFA,
-            "/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST",
-            "/TR", comando, "/F",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        shell=False,
+    exe = Path(executavel).resolve()
+    config = Path(config_path).resolve()
+    if not exe.is_file():
+        raise FileNotFoundError(f"Executável do agente não encontrado: {exe}")
+    if not config.is_file():
+        raise FileNotFoundError(f"Configuração do agente não encontrada: {config}")
+    # New-ScheduledTaskAction recebe o caminho e os argumentos separadamente;
+    # nenhum nível de cmd.exe precisa re-interpretar Program Files.
+    registrar_tarefa_boot_system(
+        NOME_TAREFA,
+        exe,
+        f'run --config "{config}"',
+        descricao="Data Intelligence TI Agent",
     )
+
+
+def iniciar_tarefa() -> None:
+    _iniciar(NOME_TAREFA)
 
 
 def remover_tarefa() -> None:
     exigir_windows()
     if not eh_administrador():
         raise PermissionError("Execute a remoção do agente como administrador.")
-    subprocess.run(
-        ["schtasks.exe", "/Delete", "/TN", NOME_TAREFA, "/F"],
-        check=True,
-        capture_output=True,
-        text=True,
-        shell=False,
-    )
+    _remover(NOME_TAREFA, ignorar_ausente=True)
 
 
 def consultar_tarefa() -> str:
-    exigir_windows()
-    resultado = subprocess.run(
-        ["schtasks.exe", "/Query", "/TN", NOME_TAREFA, "/FO", "LIST", "/V"],
-        check=False,
-        capture_output=True,
-        text=True,
-        shell=False,
-    )
-    if resultado.returncode != 0:
-        return "Tarefa do agente não instalada."
-    return resultado.stdout.strip()
+    resultado = _consultar(NOME_TAREFA)
+    return resultado or "Tarefa do agente não instalada."
 
 
 def executavel_atual() -> Path:

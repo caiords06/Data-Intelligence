@@ -1,4 +1,6 @@
-# Distribuição Windows · Data Intelligence V9.1
+> **DOCUMENTO HISTÓRICO.** Esta documentação descreve arquitetura anterior à linha final Server First. Para novas instalações, use `docs/README.md`.
+
+# Distribuição Windows · Data Intelligence V10.1.1
 
 O build produz quatro papéis separados:
 
@@ -12,7 +14,7 @@ DataIntelligence-Deployment
 
 ## 1. Servidor
 
-Instale primeiro o `Servidor`. Ele é a autoridade de autenticação, módulos, correio, arquivos, backups e telemetria TI.
+Instale primeiro o `Servidor`. Ele é a autoridade de autenticação, módulos, correio, arquivos, backups e telemetria TI. PostgreSQL é o backend recomendado para uso multiusuário; SQLite permanece para compatibilidade/standalone.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Instalar-Servidor-Corporativo.ps1

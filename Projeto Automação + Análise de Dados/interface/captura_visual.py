@@ -7,6 +7,7 @@ pelos testes visuais e pelo gerador de evidências em ``scripts/``.
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
 import sys
@@ -44,42 +45,79 @@ def aguardar_renderizacao(widget, milissegundos: int = 180) -> None:
         time.sleep(0.015)
 
 
-def capturar_widget_png(widget, destino: str | Path, *, espera_ms: int = 180) -> Path:
+def _captura_quase_preta(imagem: Image.Image) -> bool:
+    """Detecta falha transitória do ImageGrab sem confundir o tema escuro."""
+    cinza = imagem.convert("L")
+    estatistica = ImageStat.Stat(cinza)
+    return float(estatistica.mean[0]) < 2.0 and float(estatistica.stddev[0]) < 4.0
+
+
+def capturar_widget_png(
+    widget,
+    destino: str | Path,
+    *,
+    espera_ms: int = 180,
+    tentativas: int = 3,
+) -> Path:
     """Captura a área visível de um widget raiz e salva um PNG.
 
-    A janela precisa estar mapeada em um desktop gráfico real. No Windows a
-    captura inclui janelas em camadas e considera todos os monitores.
+    Alguns drivers/ambientes retornam um frame preto imediatamente após a
+    troca de uma tela Tk. A V9.5 valida a imagem em memória e repete a captura
+    antes de registrar uma falsa reprovação visual.
     """
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
-    aguardar_renderizacao(widget, espera_ms)
+    tentativas = max(1, int(tentativas))
 
+    imagem = None
     try:
-        widget.lift()
-        widget.attributes("-topmost", True)
-        widget.update()
-    except Exception:
-        pass
+        try:
+            widget.deiconify()
+        except Exception:
+            logging.getLogger(__name__).debug("A janela não aceitou deiconify antes da captura", exc_info=True)
 
-    x = int(widget.winfo_rootx())
-    y = int(widget.winfo_rooty())
-    largura = int(widget.winfo_width())
-    altura = int(widget.winfo_height())
-    if largura < 2 or altura < 2:
-        raise RuntimeError(
-            f"A janela ainda não possui dimensões capturáveis: {largura}x{altura}."
-        )
+        for tentativa in range(1, tentativas + 1):
+            aguardar_renderizacao(widget, espera_ms + (tentativa - 1) * 120)
+            try:
+                widget.lift()
+                widget.attributes("-topmost", True)
+                widget.focus_force()
+                widget.update_idletasks()
+                widget.update()
+            except Exception:
+                logging.getLogger(__name__).debug("A janela não aceitou foco/topmost antes da captura", exc_info=True)
 
-    parametros = {"bbox": (x, y, x + largura, y + altura)}
-    if sys.platform.startswith("win"):
-        parametros.update(include_layered_windows=True, all_screens=True)
-    imagem = ImageGrab.grab(**parametros)
-    imagem.save(destino, format="PNG", optimize=True)
+            x = int(widget.winfo_rootx())
+            y = int(widget.winfo_rooty())
+            largura = int(widget.winfo_width())
+            altura = int(widget.winfo_height())
+            if largura < 2 or altura < 2:
+                raise RuntimeError(
+                    f"A janela ainda não possui dimensões capturáveis: {largura}x{altura}."
+                )
 
-    try:
-        widget.attributes("-topmost", False)
-    except Exception:
-        pass
+            parametros = {"bbox": (x, y, x + largura, y + altura)}
+            if sys.platform.startswith("win"):
+                parametros.update(include_layered_windows=True, all_screens=True)
+            imagem = ImageGrab.grab(**parametros)
+            if not _captura_quase_preta(imagem) or tentativa == tentativas:
+                break
+            # Libera e reapresenta a janela antes da próxima tentativa.
+            try:
+                widget.attributes("-topmost", False)
+                widget.update()
+            except Exception:
+                logging.getLogger(__name__).debug("Falha ao reapresentar a janela para nova captura", exc_info=True)
+            time.sleep(0.08)
+
+        if imagem is None:
+            raise RuntimeError("Nenhuma imagem foi produzida pela captura visual.")
+        imagem.save(destino, format="PNG", optimize=True)
+    finally:
+        try:
+            widget.attributes("-topmost", False)
+        except Exception:
+            logging.getLogger(__name__).debug("Falha ao remover topmost após captura", exc_info=True)
     return destino
 
 

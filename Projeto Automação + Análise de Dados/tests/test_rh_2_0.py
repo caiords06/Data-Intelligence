@@ -12,6 +12,7 @@ from enterprise.banco import inicializar_enterprise
 from enterprise.contexto import obter_contexto, salvar_permissoes_usuario
 from enterprise.rh import (
     abrir_folha,
+    alterar_estado_registro_rh,
     adicionar_evento_folha,
     concluir_desligamento,
     criar_solicitacao,
@@ -157,6 +158,28 @@ class RecursosHumanos20Tests(unittest.TestCase):
         relatorio = pasta / "folha.xlsx"
         gerar_relatorio_rh("Folha", "XLSX", relatorio, admin)
         self.assertTrue(relatorio.is_file())
+
+    def test_relatorios_rh_sao_gerados_nos_tres_formatos(self):
+        admin, pasta = self._ambiente(); self._admissao(admin)
+        for formato in ("CSV", "XLSX", "PDF"):
+            with self.subTest(formato=formato):
+                relatorio = pasta / f"colaboradores.{formato.lower()}"
+                resultado = gerar_relatorio_rh("Colaboradores", formato, relatorio, admin)
+                self.assertEqual(Path(resultado), relatorio.resolve())
+                self.assertTrue(relatorio.is_file())
+                self.assertGreater(relatorio.stat().st_size, 20)
+
+    def test_remocao_logica_rh_pode_ser_restaurada(self):
+        admin, _ = self._ambiente(); self._admissao(admin)
+        colaborador_id = listar_secao("colaboradores", admin)[0]["id"]
+        alterar_estado_registro_rh("colaboradores", colaborador_id, True, admin)
+        self.assertEqual(listar_secao("colaboradores", admin), [])
+        self.assertEqual(listar_secao("colaboradores", admin, estado="Lixeira")[0]["id"], colaborador_id)
+        self.assertTrue(exportar_dataframe_rh(admin).empty)
+        alterar_estado_registro_rh("colaboradores", colaborador_id, False, admin)
+        self.assertEqual(listar_secao("colaboradores", admin)[0]["id"], colaborador_id)
+        with self.assertRaisesRegex(ValueError, "evidências"):
+            alterar_estado_registro_rh("movimentacoes", 1, True, admin)
 
     def test_talentos_documentos_solicitacoes_e_analytics(self):
         admin, pasta = self._ambiente(); self._admissao(admin)

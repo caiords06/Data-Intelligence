@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-import threading
+import io
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -70,18 +70,38 @@ class EditorGrade:
         except (ValueError, PermissionError, RuntimeError) as erro:
             messagebox.showerror(self.titulo, str(erro), parent=self.parent)
 
-    def _espelhar_servidor(self, caminho: Path):
-        def trabalho():
-            try:
-                from enterprise.servidor_cliente import espelhar_exportacao
-                espelhar_exportacao(caminho, modulo="grade", categoria="exportacao-grade")
-            except Exception:
-                # O arquivo local permanece válido; a sincronização poderá ser
-                # repetida pelo backup automático da Central.
-                return
-        threading.Thread(target=trabalho, name="Mirror-Grid-Export", daemon=True).start()
+    def _linhas_exportacao(self):
+        colunas = list(self.tree["columns"])
+        cabecalho = [self.tree.heading(c).get("text") or c for c in colunas]
+        linhas = [[self.tree.set(iid, c) for c in colunas] for iid in self.tree.get_children()]
+        return colunas, cabecalho, linhas
+
+    def _salvar_no_servidor(self, conteudo: bytes, nome: str, formato: str):
+        from core.nodo import usa_servidor_remoto
+        if not usa_servidor_remoto():
+            return None
+        from services.servidor_cliente import enviar_bytes_servidor
+        resultado = enviar_bytes_servidor(
+            conteudo, nome, modulo="grade", categoria=f"exportacao-grade-{formato.lower()}",
+        )
+        messagebox.showinfo(
+            self.titulo,
+            f"Exportação armazenada no Servidor Corporativo.\n\nArquivo: {resultado.get('nome', nome)}\nID: {resultado.get('id', '—')}",
+            parent=self.parent,
+        )
+        return resultado
 
     def exportar_csv(self, destino=None):
+        from core.nodo import usa_servidor_remoto
+        _colunas, cabecalho, linhas = self._linhas_exportacao()
+        if usa_servidor_remoto():
+            buffer = io.StringIO(newline="")
+            escritor = csv.writer(buffer, delimiter=";")
+            escritor.writerow(cabecalho)
+            escritor.writerows(linhas)
+            nome = f"{self.titulo.strip().replace(' ', '_') or 'grade'}.csv"
+            return self._salvar_no_servidor(buffer.getvalue().encode("utf-8-sig"), nome, "csv")
+
         if destino is None:
             destino = filedialog.asksaveasfilename(
                 parent=self.parent, title=f"Exportar {self.titulo}", defaultextension=".csv",
@@ -90,16 +110,30 @@ class EditorGrade:
         if not destino:
             return None
         caminho = Path(destino)
-        colunas = list(self.tree["columns"])
         with caminho.open("w", newline="", encoding="utf-8-sig") as arquivo:
             escritor = csv.writer(arquivo, delimiter=";")
-            escritor.writerow([self.tree.heading(c).get("text") or c for c in colunas])
-            for iid in self.tree.get_children():
-                escritor.writerow([self.tree.set(iid, c) for c in colunas])
-        self._espelhar_servidor(caminho)
+            escritor.writerow(cabecalho)
+            escritor.writerows(linhas)
         return caminho
 
     def exportar_xlsx(self, destino=None):
+        from core.nodo import usa_servidor_remoto
+        try:
+            from openpyxl import Workbook
+        except ImportError as erro:
+            raise RuntimeError("openpyxl é necessário para exportar XLSX.") from erro
+        wb = Workbook(); ws = wb.active; ws.title = self.titulo[:31]
+        _colunas, cabecalho, linhas = self._linhas_exportacao()
+        ws.append(cabecalho)
+        for linha in linhas:
+            ws.append(linha)
+
+        if usa_servidor_remoto():
+            buffer = io.BytesIO()
+            wb.save(buffer)
+            nome = f"{self.titulo.strip().replace(' ', '_') or 'grade'}.xlsx"
+            return self._salvar_no_servidor(buffer.getvalue(), nome, "xlsx")
+
         if destino is None:
             destino = filedialog.asksaveasfilename(
                 parent=self.parent, title=f"Exportar {self.titulo}", defaultextension=".xlsx",
@@ -107,16 +141,6 @@ class EditorGrade:
             )
         if not destino:
             return None
-        try:
-            from openpyxl import Workbook
-        except ImportError as erro:
-            raise RuntimeError("openpyxl é necessário para exportar XLSX.") from erro
-        wb = Workbook(); ws = wb.active; ws.title = self.titulo[:31]
-        colunas = list(self.tree["columns"])
-        ws.append([self.tree.heading(c).get("text") or c for c in colunas])
-        for iid in self.tree.get_children():
-            ws.append([self.tree.set(iid, c) for c in colunas])
         wb.save(destino)
-        caminho = Path(destino)
-        self._espelhar_servidor(caminho)
-        return caminho
+        return Path(destino)
+

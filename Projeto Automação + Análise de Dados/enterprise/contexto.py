@@ -14,6 +14,60 @@ ACOES_PERMISSAO = {
     "aprovar": "pode_aprovar",
 }
 
+PERFIS_GESTAO_ANALYTICS = {
+    "diretoria", "rh_diretoria", "gestor_pessoas", "financeiro_gestor",
+    "estoque_gestor", "compras_gestor", "ti_gestor",
+}
+
+
+def eh_gestor_analytics(ator: dict | None) -> bool:
+    """Analytics executivo é reservado à administração e papéis de gestão."""
+    if not ator or not ator.get("id") or not ator.get("ativo", True):
+        return False
+    if str(ator.get("perfil") or "").lower() == "admin":
+        return True
+    perfil = str(ator.get("perfil_acesso") or "").strip().lower()
+    return (
+        perfil in PERFIS_GESTAO_ANALYTICS
+        or perfil.endswith("_gestor")
+        or "diretoria" in perfil
+        or "gerente" in perfil
+    )
+
+
+def _modo_remoto() -> bool:
+    """Indica se esta interface usa o Servidor Corporativo como autoridade.
+
+    A importação é tardia para evitar ciclos entre contexto, cliente HTTP e
+    bootstrap da aplicação. Em Central/Cliente nenhuma função desta camada
+    deve abrir uma conexão PostgreSQL diretamente.
+    """
+    from core.nodo import usa_servidor_remoto
+
+    return usa_servidor_remoto()
+
+
+def _bootstrap_remoto(*, atualizar_se_necessario: bool = True) -> dict:
+    """Obtém o contexto remoto mantido somente em memória na estação.
+
+    O login já devolve esse bootstrap. Se ele não estiver disponível (por
+    exemplo, após alguma atualização de contexto), fazemos uma única leitura
+    autenticada no servidor. Não existe fallback para banco local.
+    """
+    from enterprise.servidor_cliente import contexto_memoria, validar_sessao_remota
+
+    bootstrap = dict(contexto_memoria() or {})
+    if atualizar_se_necessario and (not bootstrap.get("usuario") or not bootstrap.get("empresa")):
+        bootstrap = dict(validar_sessao_remota() or {})
+    return bootstrap
+
+
+def _linha_permissao_remota(bootstrap: dict, modulo: str) -> dict | None:
+    for item in bootstrap.get("permissoes") or []:
+        if str(item.get("modulo") or "").strip().lower() == modulo:
+            return dict(item)
+    return None
+
 
 def _permissoes_padrao_seguras(perfil_acesso) -> dict[str, dict[str, bool]]:
     try:
@@ -34,6 +88,30 @@ def garantir_contexto_sessao() -> tuple[int, int | None]:
     """
     if not SESSAO.autenticado():
         raise PermissionError("Usuário não autenticado.")
+
+    if _modo_remoto():
+        bootstrap = _bootstrap_remoto()
+        remoto = dict(bootstrap.get("usuario") or {})
+        empresa = dict(bootstrap.get("empresa") or {})
+        if not remoto or not bool(remoto.get("ativo", True)):
+            SESSAO.encerrar()
+            raise PermissionError("Sua sessão remota não está mais ativa. Entre novamente.")
+        if int(remoto.get("id") or 0) != int(SESSAO.usuario.get("id") or 0):
+            SESSAO.encerrar()
+            raise PermissionError("O contexto remoto não corresponde ao usuário autenticado.")
+        if empresa.get("id") is None:
+            raise PermissionError("O servidor não retornou uma empresa ativa para a sessão.")
+        # O servidor é a autoridade de perfil/epoch e a estação apenas espelha
+        # esses dados em memória durante a sessão.
+        SESSAO.usuario.update(remoto)
+        SESSAO.definir_contexto_empresarial(
+            int(empresa["id"]),
+            int(bootstrap["filial_id"]) if bootstrap.get("filial_id") is not None else None,
+        )
+        return int(SESSAO.empresa_id), (
+            int(SESSAO.filial_id) if SESSAO.filial_id is not None else None
+        )
+
     with conectar() as conexao:
         usuario_id = int(SESSAO.usuario["id"])
         estado_usuario = conexao.execute(
@@ -139,6 +217,21 @@ def garantir_contexto_sessao() -> tuple[int, int | None]:
 
 def obter_contexto() -> dict:
     empresa_id, filial_id = garantir_contexto_sessao()
+    if _modo_remoto():
+        bootstrap = _bootstrap_remoto(atualizar_se_necessario=False)
+        empresa = dict(bootstrap.get("empresa") or {})
+        filial = next(
+            (dict(item) for item in (bootstrap.get("filiais") or [])
+             if filial_id is not None and int(item.get("id") or 0) == int(filial_id)),
+            None,
+        )
+        return {
+            "empresa_id": empresa_id,
+            "empresa_nome": str(empresa.get("nome") or "Empresa"),
+            "filial_id": filial_id,
+            "filial_nome": filial.get("nome") if filial else None,
+        }
+
     with conectar() as conexao:
         empresa = conexao.execute(
             "SELECT id, nome FROM empresas WHERE id = ?",
@@ -166,6 +259,30 @@ def obter_escopo_ator(ator: dict | None) -> tuple[int, int | None]:
     Quando o ator traz ``_empresa_id``/``_filial_id``, o contexto é validado no
     banco e não depende de alterações posteriores em ``SESSAO``.
     """
+    if _modo_remoto():
+        if not ator or not ator.get("id"):
+            raise PermissionError("Ator inválido para o contexto empresarial.")
+        if not SESSAO.usuario or int(ator["id"]) != int(SESSAO.usuario.get("id") or 0):
+            raise PermissionError("A estação só pode operar com o usuário remoto autenticado.")
+        empresa_sessao, filial_sessao = garantir_contexto_sessao()
+        empresa_id = ator.get("_empresa_id")
+        filial_id = ator.get("_filial_id")
+        if empresa_id is None:
+            return empresa_sessao, filial_sessao
+        empresa_id = int(empresa_id)
+        if empresa_id != int(empresa_sessao):
+            raise PermissionError("O contexto empresarial do trabalho não corresponde à sessão remota.")
+        if filial_id is None:
+            return empresa_id, filial_sessao
+        filial_id = int(filial_id)
+        bootstrap = _bootstrap_remoto(atualizar_se_necessario=False)
+        filiais_validas = {int(item["id"]) for item in (bootstrap.get("filiais") or []) if item.get("id") is not None}
+        if filial_id not in filiais_validas:
+            raise PermissionError("A filial do trabalho não pertence ao contexto remoto atual.")
+        if filial_sessao is not None and filial_id != int(filial_sessao):
+            raise PermissionError("O usuário não possui acesso à filial do trabalho.")
+        return empresa_id, filial_id
+
     empresa_id = ator.get("_empresa_id") if ator else None
     filial_id = ator.get("_filial_id") if ator else None
     if empresa_id is None:
@@ -247,8 +364,30 @@ def tem_permissao(ator: dict | None, modulo: str, acao: str = "ler") -> bool:
         return False
     if not ator or not ator.get("id") or not ator.get("ativo", True):
         return False
+    # Uma permissão avulsa não transforma um perfil operacional em gestor. A
+    # camada de domínio repete esta regra, impedindo acesso por URL/RPC direto.
+    if modulo == "analytics":
+        if not eh_gestor_analytics(ator):
+            return False
     if ator.get("perfil") == "admin":
         return True
+
+    if _modo_remoto():
+        try:
+            if not SESSAO.usuario or int(ator["id"]) != int(SESSAO.usuario.get("id") or 0):
+                return False
+            garantir_contexto_sessao()
+            bootstrap = _bootstrap_remoto(atualizar_se_necessario=False)
+        except (PermissionError, RuntimeError, ValueError, TypeError, KeyError):
+            return False
+        if modulo == "analytics":
+            return acao in {"ler", "escrever"}
+        registro = _linha_permissao_remota(bootstrap, modulo)
+        if registro is not None:
+            return bool(registro.get(ACOES_PERMISSAO[acao]))
+        perfil_acesso = ator.get("perfil_acesso") or "analista"
+        return bool(_permissoes_padrao_seguras(perfil_acesso)[modulo][acao])
+
     try:
         empresa_id, _ = obter_escopo_ator(ator)
     except (PermissionError, RuntimeError):
@@ -261,6 +400,8 @@ def tem_permissao(ator: dict | None, modulo: str, acao: str = "ler") -> bool:
         ).fetchone()
         if vinculo is None:
             return False
+        if modulo == "analytics":
+            return acao in {"ler", "escrever"}
         registro = conexao.execute(
             f"""
             SELECT {coluna} AS permitido
@@ -293,7 +434,7 @@ def listar_modulos_permitidos(ator: dict | None) -> list[str]:
 def obter_permissoes_usuario(usuario_id: int, ator: dict | None) -> dict[str, dict]:
     if not ator or ator.get("perfil") != "admin":
         raise PermissionError("Somente administradores podem consultar permissões.")
-    empresa_id, _ = garantir_contexto_sessao()
+    empresa_id, _ = obter_escopo_ator(ator)
     with conectar() as conexao:
         usuario = conexao.execute(
             "SELECT perfil, perfil_acesso FROM usuarios WHERE id = ?",
@@ -355,7 +496,7 @@ def salvar_permissoes_usuario(
         raise PermissionError("Somente administradores podem alterar permissões.")
     if int(usuario_id) == int(ator["id"]):
         raise ValueError("As permissões do administrador atual não precisam ser alteradas.")
-    empresa_id, _ = garantir_contexto_sessao()
+    empresa_id, _ = obter_escopo_ator(ator)
     with conectar() as conexao:
         usuario = conexao.execute(
             "SELECT perfil_acesso FROM usuarios WHERE id = ?",
@@ -418,3 +559,10 @@ def aplicar_perfil_padrao_usuario(
         obter_permissoes_perfil(perfil_acesso),
         ator,
     )
+
+
+# Em Central/Cliente, gestão de permissões é sempre executada no Servidor
+# Corporativo. O cache local continua apenas para navegação/estado de sessão.
+from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
+_instalar_proxy_modulo(globals(), __name__)
+del _instalar_proxy_modulo

@@ -1,3 +1,4 @@
+from core.versao import VERSAO_INTERFACE
 import tkinter as tk
 
 from tkinter import messagebox
@@ -5,7 +6,9 @@ from tkinter import messagebox
 from auth.autenticacao import criar_admin_inicial
 from auth.sessao import SESSAO
 
-from interface.tema import CORES, MARCA
+from interface.gerenciador_tema import alternar_tema
+from interface.icones import icone
+from interface.tema import CORES, MARCA, tema_atual
 
 
 class TelaPrimeiroAcesso:
@@ -25,7 +28,7 @@ class TelaPrimeiroAcesso:
 
     def criar_interface(self):
 
-        self.root.title("Data Intelligence · Configuração inicial · V9.0")
+        self.root.title(f"Data Intelligence · Configuração inicial · {VERSAO_INTERFACE}")
 
         self.container = tk.Frame(
             self.root,
@@ -37,37 +40,60 @@ class TelaPrimeiroAcesso:
             expand=True
         )
 
+        tk.Button(
+            self.container,
+            text=(f"{icone('tema_claro')}  CLARO" if tema_atual() == "escuro" else f"{icone('tema_escuro')}  ESCURO"),
+            command=self._alternar_tema,
+            font=("Segoe UI Symbol", 8, "bold"),
+            bg=self.cores["bg_elevado"],
+            fg=self.cores["text_sec"],
+            activebackground=self.cores["card_hover"],
+            activeforeground=self.cores["text"],
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=12,
+            pady=7,
+        ).place(relx=0.97, rely=0.04, anchor="ne")
+
         card = tk.Frame(
             self.container,
             bg=self.cores["card"],
             width=440,
-            height=720,
+            height=650,
             highlightthickness=1,
             highlightbackground=self.cores["border"]
         )
 
-        card.place(
-            relx=0.5,
-            rely=0.5,
-            anchor="center"
-        )
-
+        card.place(relx=0.5, rely=0.5, anchor="center")
+        self.card = card
         card.pack_propagate(False)
+
+        def ajustar_card(evento):
+            # V10.2.1: respeita a altura mínima 680 sem empurrar o CTA para
+            # fora da janela e volta ao tamanho confortável em telas maiores.
+            altura = min(720, max(630, int(evento.height) - 24))
+            largura = min(440, max(390, int(evento.width) - 80))
+            try:
+                card.configure(width=largura, height=altura)
+            except tk.TclError:
+                pass
+        self.container.bind("<Configure>", ajustar_card, add="+")
 
         tk.Label(
             card,
             text=f'{MARCA["simbolo"]}  {MARCA["nome"]}',
-            font=("Segoe UI", 20, "bold"),
+            font=("Inter", 20, "bold"),
             fg=self.cores["text"],
             bg=self.cores["card"]
         ).pack(
-            pady=(35, 5)
+            pady=(24, 4)
         )
 
         tk.Label(
             card,
             text="CONFIGURAÇÃO INICIAL",
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             fg=self.cores["primary"],
             bg=self.cores["card"]
         ).pack()
@@ -75,11 +101,11 @@ class TelaPrimeiroAcesso:
         tk.Label(
             card,
             text="Criar administrador",
-            font=("Segoe UI", 18, "bold"),
+            font=("Inter", 18, "bold"),
             fg=self.cores["text"],
             bg=self.cores["card"]
         ).pack(
-            pady=(25, 5)
+            pady=(18, 4)
         )
 
         tk.Label(
@@ -88,11 +114,11 @@ class TelaPrimeiroAcesso:
                 "Este será o primeiro administrador "
                 "da plataforma."
             ),
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=self.cores["text_sec"],
             bg=self.cores["card"]
         ).pack(
-            pady=(0, 20)
+            pady=(0, 12)
         )
 
         self.entry_nome = self.criar_campo(
@@ -128,7 +154,7 @@ class TelaPrimeiroAcesso:
                 "Use 10 ou mais caracteres com letra maiúscula, minúscula, "
                 "número e símbolo."
             ),
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=self.cores["text_muted"],
             bg=self.cores["card"],
             wraplength=340,
@@ -142,7 +168,7 @@ class TelaPrimeiroAcesso:
         self.label_status = tk.Label(
             card,
             text="",
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=self.cores["warning"],
             bg=self.cores["card"]
         )
@@ -154,7 +180,7 @@ class TelaPrimeiroAcesso:
         tk.Button(
             card,
             text="CRIAR ADMINISTRADOR",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=self.cores["primary"],
             fg="#FFFFFF",
             activebackground=self.cores["primary_hover"],
@@ -164,7 +190,7 @@ class TelaPrimeiroAcesso:
         ).pack(
             fill="x",
             padx=45,
-            pady=(15, 20),
+            pady=(10, 16),
             ipady=9
         )
 
@@ -184,13 +210,13 @@ class TelaPrimeiroAcesso:
         frame.pack(
             fill="x",
             padx=45,
-            pady=7
+            pady=5
         )
 
         tk.Label(
             frame,
             text=titulo.upper(),
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             fg=self.cores["text_sec"],
             bg=self.cores["card"]
         ).pack(
@@ -220,7 +246,7 @@ class TelaPrimeiroAcesso:
 
         entry = tk.Entry(
             entrada_interior,
-            font=("Segoe UI", 10),
+            font=("Inter", 10),
             bg=self.cores["input"],
             fg=self.cores["text"],
             insertbackground=self.cores["primary"],
@@ -245,6 +271,26 @@ class TelaPrimeiroAcesso:
         )
 
         return entry
+
+
+    def _alternar_tema(self):
+        valores = []
+        for nome in ("entry_nome", "entry_usuario", "entry_email", "entry_senha", "entry_confirmar"):
+            campo = getattr(self, nome, None)
+            valores.append(campo.get() if campo is not None else "")
+        alternar_tema(self.root)
+        try:
+            self.container.destroy()
+        except tk.TclError:
+            pass
+        self.criar_interface()
+        for nome, valor in zip(
+            ("entry_nome", "entry_usuario", "entry_email", "entry_senha", "entry_confirmar"),
+            valores,
+        ):
+            campo = getattr(self, nome, None)
+            if campo is not None and valor:
+                campo.insert(0, valor)
 
 
     def criar_admin(self):
@@ -280,6 +326,13 @@ class TelaPrimeiroAcesso:
         SESSAO.iniciar(
             usuario
         )
+
+        try:
+            from configuracoes.preferencias import salvar_preferencias
+            salvar_preferencias({"tema_interface": tema_atual()})
+        except (PermissionError, RuntimeError, OSError, ValueError):
+            # A criação da conta não deve falhar por uma preferência visual.
+            pass
 
         messagebox.showinfo(
             "Configuração concluída",

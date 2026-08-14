@@ -1,0 +1,5 @@
+Data Intelligence Enterprise Platform
+Versão: 9.8.0
+Release: V9.8
+Foco: componentização da infraestrutura visual compartilhada.
+Python oficial de release: 3.14

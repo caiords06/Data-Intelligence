@@ -1,0 +1,6 @@
+V10.4.1 — Inteligência transversal e orquestrações
+- Marketing -> CRM -> Comercial sem duplicar lead.
+- Jurídico -> Financeiro por encaminhamento de provisões.
+- Compras -> Estoque por fluxo de reposição.
+- RH -> TI -> Estoque -> Administrativo em admissão/desligamento.
+- Fluxos e etapas persistentes, rastreáveis e idempotentes quando aplicável.

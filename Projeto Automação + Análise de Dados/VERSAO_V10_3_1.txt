@@ -1,0 +1,4 @@
+V10.3.1 — Comercial especializado
+- CRM compartilhado com Marketing
+- pipeline, oportunidades, atividades, propostas, metas e forecast
+- migração segura da carteira comercial legada

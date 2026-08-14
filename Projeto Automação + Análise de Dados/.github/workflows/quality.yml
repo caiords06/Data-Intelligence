@@ -1,4 +1,4 @@
-name: Qualidade V9.3
+name: Qualidade V11.1.0
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        grupo: [1, 2, 3]
+        grupo: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,14 +27,111 @@ jobs:
         run: python scripts/verificar_python_release.py
       - name: Compilar fontes
         run: python -m compileall -q -x '/(build|dist|release|storage|artifacts|\.git)/' .
+      - name: Auditar arquitetura em camadas
+        run: python scripts/auditar_camadas_arquitetura.py
+      - name: Validar contrato do Setup V11.1.0
+        run: python scripts/verificar_instalador_v10.py
       - name: Executar grupo de testes
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
-        run: python scripts/executar_grupo_testes.py --grupo ${{ matrix.grupo }} --total 3
+        run: python scripts/executar_grupo_testes.py --grupo ${{ matrix.grupo }} --total 6
+
+  analise-estatica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Instalar ambiente de qualidade
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.lock.txt
+          python -m pip install -r requirements-build.lock.txt
+      - name: Lint e exceções silenciosas
+        run: |
+          ruff check .
+          python scripts/auditar_excecoes_silenciosas.py
+      - name: Tipagem do núcleo endurecido
+        run: >-
+          mypy --follow-imports=skip
+          auth/mfa.py core/criptografia.py enterprise/automacao_motor.py
+          enterprise/privacidade.py enterprise/webhooks.py
+          servidor_corporativo/sessoes.py servidor_corporativo/dto.py
+      - name: Cobertura das garantias de hardening
+        env:
+          DATA_INTELLIGENCE_DB_BACKEND: sqlite
+          DATA_INTELLIGENCE_ENABLE_LEGACY_SQLITE: '1'
+          DATA_INTELLIGENCE_NODE_ROLE: servidor
+          DATA_INTELLIGENCE_MFA_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          DATA_INTELLIGENCE_BACKUP_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+        run: |
+          coverage run --source=auth.mfa,core.criptografia,enterprise.automacao_motor,servidor_corporativo.sessoes,servidor_corporativo.controles_api -m pytest -q tests/test_hardening_producao.py
+          coverage report --fail-under=55
+      - name: SAST e dependências vulneráveis
+        run: |
+          bandit -r auth core enterprise servidor_corporativo -x tests -lll -iii
+          pip-audit -r requirements.lock.txt
+      - name: Gerar SBOM CycloneDX
+        run: |
+          mkdir -p artifacts
+          cyclonedx-py requirements requirements.lock.txt --output-file artifacts/sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: artifacts/sbom.cdx.json
+
+
+  postgresql-integracao:
+    runs-on: ubuntu-latest
+    needs: [testes, analise-estatica]
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: dataintelligence
+          POSTGRES_USER: dataintelligence
+          POSTGRES_PASSWORD: dataintelligence_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dataintelligence -d dataintelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RUN_POSTGRES_INTEGRATION: '1'
+      DATA_INTELLIGENCE_DB_BACKEND: postgresql
+      DATA_INTELLIGENCE_PG_HOST: 127.0.0.1
+      DATA_INTELLIGENCE_PG_PORT: '5432'
+      DATA_INTELLIGENCE_PG_DATABASE: dataintelligence
+      DATA_INTELLIGENCE_PG_USER: dataintelligence
+      DATA_INTELLIGENCE_PG_PASSWORD: dataintelligence_ci
+      DATA_INTELLIGENCE_PG_SSLMODE: disable
+      DATA_INTELLIGENCE_PG_POOL_MIN: '1'
+      DATA_INTELLIGENCE_PG_POOL_MAX: '4'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Instalar dependências PostgreSQL homologadas
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.lock.txt
+          python -m pip install -r requirements-build.lock.txt
+      - name: Integração real PostgreSQL V10.1
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: python -m pytest -q tests/test_v10_1_postgresql_integration.py
 
   pacote-fonte:
     runs-on: ubuntu-latest
-    needs: testes
+    needs: [testes, analise-estatica]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -48,13 +145,13 @@ jobs:
           python -m pip install -r requirements.lock.txt
           python -m pip install -r requirements-build.lock.txt
       - name: Gerar pacote-fonte canônico
-        run: python scripts/empacotar_fonte_limpa.py release/DataIntelligence-Source-V9.3.0.zip
+        run: python scripts/empacotar_fonte_limpa.py release/DataIntelligence-Source-V11.1.0.zip
       - name: Validar estrutura do pacote extraído do zero
-        run: python scripts/verificar_fonte_reproduzivel.py release/DataIntelligence-Source-V9.3.0.zip
+        run: python scripts/verificar_fonte_reproduzivel.py release/DataIntelligence-Source-V11.1.0.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: DataIntelligence-Source-V9.3.0
-          path: release/DataIntelligence-Source-V9.3.0.zip
+          name: DataIntelligence-Source-V11.1.0
+          path: release/DataIntelligence-Source-V11.1.0.zip
 
 
   pacote-fonte-testes:
@@ -64,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        grupo: [1, 2, 3]
+        grupo: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -78,12 +175,12 @@ jobs:
           python -m pip install -r requirements-build.lock.txt
       - uses: actions/download-artifact@v4
         with:
-          name: DataIntelligence-Source-V9.3.0
+          name: DataIntelligence-Source-V11.1.0
           path: release
       - name: Validar grupo no ZIP extraído
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
-        run: python scripts/verificar_fonte_reproduzivel.py release/DataIntelligence-Source-V9.3.0.zip --grupo ${{ matrix.grupo }}
+        run: python scripts/verificar_fonte_reproduzivel.py release/DataIntelligence-Source-V11.1.0.zip --grupo ${{ matrix.grupo }}
 
   interface-essencial:
     runs-on: ubuntu-latest
@@ -126,7 +223,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    needs: [testes, pacote-fonte-testes]
+    needs: [testes, postgresql-integracao, pacote-fonte-testes]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -151,6 +248,20 @@ jobs:
           python -m PyInstaller --noconfirm --clean DataIntelligencePlatform.spec
           python -m PyInstaller --noconfirm --clean agente_ti.spec
           python -m PyInstaller --noconfirm --clean DataIntelligenceServer.spec
+          python -m PyInstaller --noconfirm --clean DataIntelligenceUpdateHelper.spec
           if (!(Test-Path 'dist\DataIntelligencePlatform\DataIntelligencePlatform.exe')) { throw 'Desktop não foi gerado' }
           if (!(Test-Path 'dist\DataIntelligenceTIAgent.exe')) { throw 'Agente não foi gerado' }
           if (!(Test-Path 'dist\DataIntelligenceServer.exe')) { throw 'Servidor não foi gerado' }
+          if (!(Test-Path 'dist\DataIntelligenceUpdateHelper.exe')) { throw 'Helper de update não foi gerado' }
+      - name: Instalar Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Gerar Setup.exe unificado V11
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts\build_setup_windows.ps1 -SkipPyInstaller
+          if (!(Test-Path 'release\DataIntelligence_Setup_V11.1.0.exe')) { throw 'Setup V11.1.0 não foi gerado' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DataIntelligence-Setup-V11.1.0
+          path: release/DataIntelligence_Setup_V11.1.0.exe

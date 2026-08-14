@@ -1,0 +1,5 @@
+Data Intelligence Enterprise Platform
+Versão: 9.5.0
+Interface: V9.5
+Linha: Refatoração de Domínios + Compatibilidade
+Python oficial de release: 3.14

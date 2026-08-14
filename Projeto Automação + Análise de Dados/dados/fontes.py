@@ -1,4 +1,4 @@
-"""Aquisição segura de fontes externas suportadas pela análise V8.2."""
+"""Aquisição segura de fontes externas da plataforma Data Intelligence."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ import socket
 import sqlite3
 from contextlib import closing
 import time
+import tempfile
 from pathlib import Path
+from core.versao import VERSAO_PLATAFORMA
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
@@ -20,6 +22,23 @@ from auth import banco
 
 EXTENSOES = {".xlsx", ".xls", ".csv", ".json", ".parquet", ".txt"}
 LIMITE_BYTES = 100 * 1024 * 1024
+
+
+def _pasta_importacoes_temporarias() -> Path:
+    """Usa ProgramData somente no processo servidor/standalone legado.
+
+    Em Central/Cliente, fontes externas são transitórias e não devem virar
+    persistência em ``C:/ProgramData/DataIntelligence``. Elas ficam na pasta
+    temporária do sistema e são removidas ao concluir/cancelar a análise.
+    """
+    try:
+        from core.nodo import usa_servidor_remoto
+        remoto = usa_servidor_remoto()
+    except (ValueError, RuntimeError, OSError):
+        remoto = False
+    if remoto:
+        return Path(tempfile.gettempdir()) / "DataIntelligence" / "importacoes_temp"
+    return banco.STORAGE_DIR / "importacoes_temp"
 
 
 class _RedirectSeguro(HTTPRedirectHandler):
@@ -96,9 +115,9 @@ def baixar_fonte(url: str, origem: str = "URL") -> str:
         url = _url_onedrive(url)
     requisicao = Request(
         url,
-        headers={"User-Agent": "Data-Intelligence-V8.2/1.0"},
+        headers={"User-Agent": f"Data-Intelligence/{VERSAO_PLATAFORMA}"},
     )
-    pasta = banco.STORAGE_DIR / "importacoes_temp"
+    pasta = _pasta_importacoes_temporarias()
     pasta.mkdir(parents=True, exist_ok=True)
     abridor = build_opener(_RedirectSeguro())
     with abridor.open(requisicao, timeout=30) as resposta:
@@ -155,7 +174,7 @@ def importar_sqlite(caminho: str, tabela: str) -> str:
         if existe is None:
             raise ValueError("Tabela ou view não encontrada no banco informado.")
         identificador = '"' + tabela.replace('"', '""') + '"'
-        pasta = banco.STORAGE_DIR / "importacoes_temp"
+        pasta = _pasta_importacoes_temporarias()
         pasta.mkdir(parents=True, exist_ok=True)
         destino = pasta / f"sqlite_{uuid4().hex}.csv"
         primeiro_bloco = True
@@ -193,7 +212,7 @@ def importar_sqlite(caminho: str, tabela: str) -> str:
 def limpar_arquivo_temporario(caminho: str | Path) -> bool:
     """Remove somente arquivos pertencentes ao diretório temporário gerenciado."""
     alvo = Path(caminho).expanduser().resolve()
-    pasta = (banco.STORAGE_DIR / "importacoes_temp").resolve()
+    pasta = _pasta_importacoes_temporarias().resolve()
     if alvo.parent != pasta or not alvo.name.startswith(("fonte_", "sqlite_")):
         return False
     alvo.unlink(missing_ok=True)
@@ -202,7 +221,7 @@ def limpar_arquivo_temporario(caminho: str | Path) -> bool:
 
 def limpar_temporarios_antigos(horas: int = 24) -> int:
     """Remove sobras gerenciadas antigas sem tocar em arquivos do usuário."""
-    pasta = banco.STORAGE_DIR / "importacoes_temp"
+    pasta = _pasta_importacoes_temporarias()
     if not pasta.exists():
         return 0
     limite = time.time() - max(1, int(horas)) * 3600

@@ -1,3 +1,9 @@
 # Ferramentas usadas somente para validar e gerar a distribuição Windows.
 pyinstaller>=6.15,<7
 pytest>=8,<10
+ruff>=0.16,<0.17
+mypy>=2.3,<2.4
+coverage>=7.15,<8
+bandit>=1.9,<2
+pip-audit>=2.10,<3
+cyclonedx-bom>=7.3,<8

@@ -180,9 +180,13 @@ class Tecnologia20Tests(unittest.TestCase):
 
     def test_acesso_remoto_exige_consentimento_e_mantem_trilha(self):
         admin, _ = self._ambiente(); ativo = self._ativo(admin)
+        chamado = criar_chamado({
+            "titulo": "Suporte remoto autorizado", "descricao": "Usuário solicitou atendimento remoto.",
+            "categoria": "Suporte", "prioridade": "Média", "ativo_id": ativo,
+        }, admin)
         with self.assertRaises(PermissionError):
-            solicitar_acesso_remoto(ativo, "AnyDesk", "Atendimento autorizado pelo chamado.", admin, consentimento=False)
-        sessao = solicitar_acesso_remoto(ativo, "AnyDesk", "Atendimento autorizado pelo chamado.", admin, consentimento=True)
+            solicitar_acesso_remoto(ativo, "AnyDesk", "Atendimento autorizado pelo chamado.", admin, chamado_id=chamado, consentimento=False)
+        sessao = solicitar_acesso_remoto(ativo, "AnyDesk", "Atendimento autorizado pelo chamado.", admin, chamado_id=chamado, consentimento=True)
         self.assertTrue(sessao["destino"].startswith("anydesk:"))
         encerrar_acesso_remoto(sessao["acesso_id"], "Ajuste concluído e validado pelo usuário.", admin)
         acesso = listar_secao("acessos", admin)[0]

@@ -27,6 +27,12 @@ from enterprise.contexto import obter_contexto
 )
 class InterfaceSmokeV82Tests(unittest.TestCase):
     def setUp(self):
+        # Mantém um único interpretador Tcl/Tk por método de teste.
+        # As telas individuais são abertas em Toplevels. Isso evita recriar
+        # dezenas de interpretadores Tk no mesmo processo, comportamento
+        # desnecessário para este smoke e instável em alguns builds Windows.
+        self._tk_master = tk.Tk()
+        self._tk_master.withdraw()
         self.temporario = tempfile.TemporaryDirectory()
         pasta = Path(self.temporario.name)
         self.patch_db = patch.object(banco, "DB_PATH", pasta / "ui.db")
@@ -53,6 +59,13 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
         self.patch_db.stop()
         self.patch_storage.stop()
         self.temporario.cleanup()
+        self._finalizar_root(self._tk_master)
+
+    def _nova_janela(self):
+        # Toplevel possui o mesmo conjunto de operações de janela usado pelas
+        # telas (geometry/title/protocol/update etc.), mas compartilha o mesmo
+        # interpretador Tcl/Tk do teste.
+        return tk.Toplevel(self._tk_master)
 
     @staticmethod
     def _finalizar_root(root):
@@ -156,7 +169,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
             )
         for nome, fabrica in casos:
             with self.subTest(tela=nome):
-                root = tk.Tk()
+                root = self._nova_janela()
                 root.geometry("1366x768+0+0")
                 try:
                     fabrica(root)
@@ -170,7 +183,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
     def test_area_rolavel_ignora_evento_tardio_depois_de_destruida(self):
         from interface.componentes import AreaRolavel
 
-        root = tk.Tk()
+        root = self._nova_janela()
         root.geometry("800x600+0+0")
         try:
             area = AreaRolavel(root)
@@ -217,7 +230,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
             ("usuarios", lambda r: TelaUsuarios(r, navegacao=self.navegacao), "Usuários e acessos"),
         ):
             with self.subTest(tela=nome):
-                root = tk.Tk()
+                root = self._nova_janela()
                 root.geometry("1366x768+0+0")
                 try:
                     fabrica(root)
@@ -232,7 +245,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
         from interface.organizacao import TelaOrganizacao
 
         empresa_id = criar_empresa("Temporária UI", ator=SESSAO.usuario)
-        root = tk.Tk()
+        root = self._nova_janela()
         root.geometry("1366x768+0+0")
         try:
             tela = TelaOrganizacao(root, self.navegacao)
@@ -258,7 +271,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
     def test_historico_multisselecao_apaga_acoes_de_item_unico(self):
         from interface.historico import TelaHistorico
 
-        root = tk.Tk()
+        root = self._nova_janela()
         root.geometry("1366x768+0+0")
         try:
             tela = TelaHistorico(root, self.navegacao)
@@ -297,7 +310,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
             )
             menus = []
             for secao, fabrica in casos:
-                root = tk.Tk()
+                root = self._nova_janela()
                 root.geometry("1366x768+0+0")
                 try:
                     fabrica(root)
@@ -322,7 +335,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
             lambda r: AplicacaoAutomacao(r, navegacao=self.navegacao),
             lambda r: TelaCentralAnalytics(r, self.navegacao, secao="conjuntos"),
         ):
-            root = tk.Tk()
+            root = self._nova_janela()
             root.geometry("1440x900+0+0")
             try:
                 fabrica(root)
@@ -348,7 +361,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
 
         for secao in ("portal", "abrir_chamado", "meus_chamados", "cockpit", "rede", "ativos"):
             with self.subTest(secao=secao):
-                root = tk.Tk()
+                root = self._nova_janela()
                 root.geometry("1366x768+0+0")
                 try:
                     TelaTecnologia(root, self.navegacao, secao=secao)
@@ -362,7 +375,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
         from interface.tecnologia import TelaTecnologia
         from interface.tema import CORES
 
-        root = tk.Tk()
+        root = self._nova_janela()
         root.geometry("1366x768+0+0")
         try:
             tela = TelaTecnologia(root, self.navegacao, secao="ativos")
@@ -405,7 +418,7 @@ class InterfaceSmokeV82Tests(unittest.TestCase):
         )
         SESSAO.iniciar(usuario)
         obter_contexto()
-        root = tk.Tk()
+        root = self._nova_janela()
         root.geometry("1366x768+0+0")
         try:
             tela = TelaTecnologia(root, self.navegacao, secao="cockpit")

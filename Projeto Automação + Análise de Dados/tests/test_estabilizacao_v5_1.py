@@ -119,8 +119,10 @@ class EstabilizacaoV51Tests(unittest.TestCase):
                 "WHERE chave = 'v5_1_perfis_departamentais'"
             )
         inicializar_enterprise()
-        self.assertTrue(tem_permissao(usuario, "analytics", "ler"))
-        self.assertTrue(tem_permissao(usuario, "analytics", "escrever"))
+        # V11.1.0: permissões legadas não elevam um analista operacional a
+        # gestor. Analytics executivo exige papel de gestão/diretoria.
+        self.assertFalse(tem_permissao(usuario, "analytics", "ler"))
+        self.assertFalse(tem_permissao(usuario, "analytics", "escrever"))
 
     def test_perfis_cobrem_departamentos_e_combinacoes_plus(self):
         esperados = {

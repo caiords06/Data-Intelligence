@@ -1,0 +1,12 @@
+Data Intelligence Enterprise Platform V10.1.1
+Release de estabilidade e correção Server First
+
+- Servidor Corporativo é a autoridade transacional de Central e Cliente.
+- node.json tolera UTF-8 com/sem BOM e executável sem configuração falha fechado.
+- tarefas Windows de Servidor e Agente são registradas sem cmd.exe/aspas frágeis.
+- Setup interrompe tarefas antigas em upgrade, inicia/valida serviços e faz rollback de tarefa parcial.
+- Agente valida o primeiro heartbeat antes de concluir o provisionamento.
+- Permissões, organização, usuários, nós e demais fachadas transacionais cobertas usam o Servidor Corporativo.
+- PostgreSQL recebeu correções de compatibilidade SQL e sequence/lastrowid.
+- scripts fallback usam os mesmos caminhos e regras do Setup unificado.
+- build oficial limpa build/dist/release automaticamente.

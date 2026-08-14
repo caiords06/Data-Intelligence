@@ -1,5 +1,6 @@
 """Administração segura de usuários da aplicação."""
 
+from core.versao import VERSAO_INTERFACE
 from datetime import datetime, timezone
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
@@ -12,13 +13,13 @@ from auth.autenticacao import (
     redefinir_senha,
 )
 from auth.sessao import SESSAO
-from enterprise.catalogo import MODULOS, ORDEM_MODULOS
-from enterprise.contexto import (
+from services.catalogo import MODULOS, ORDEM_MODULOS
+from services.contexto import (
     aplicar_perfil_padrao_usuario,
     obter_permissoes_usuario,
     salvar_permissoes_usuario,
 )
-from enterprise.perfis_acesso import (
+from services.perfis_acesso import (
     nome_perfil_acesso,
     opcoes_perfis_acesso,
 )
@@ -85,7 +86,7 @@ class TelaUsuarios:
                 "permissões. As operações ficam registradas na auditoria local."
             ),
             breadcrumb="GESTÃO  /  USUÁRIOS E ACESSOS",
-            etiqueta="SEGURANÇA V9.0",
+            etiqueta=f"SEGURANÇA {VERSAO_INTERFACE}",
         )
 
         area = tk.Frame(conteudo, bg=CORES["bg"])
@@ -107,7 +108,7 @@ class TelaUsuarios:
         tk.Label(
             painel,
             text="USUÁRIOS CADASTRADOS",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["primary"],
             bg=CORES["card"],
         ).pack(anchor="w", padx=20, pady=(20, 10))
@@ -184,7 +185,7 @@ class TelaUsuarios:
         tk.Label(
             painel,
             text="NOVO USUÁRIO",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             fg=CORES["primary"],
             bg=CORES["card"],
         ).pack(anchor="w", padx=25, pady=(24, 7))
@@ -197,7 +198,7 @@ class TelaUsuarios:
         tk.Label(
             painel,
             text="Mínimo de 10 caracteres, com maiúscula, minúscula, número e símbolo.",
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=CORES["text_muted"],
             bg=CORES["card"],
             justify="left",
@@ -207,7 +208,7 @@ class TelaUsuarios:
         tk.Label(
             painel,
             text="PERFIL DE ACESSO",
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             fg=CORES["text_sec"],
             bg=CORES["card"],
         ).pack(anchor="w", padx=25, pady=(10, 5))
@@ -232,7 +233,7 @@ class TelaUsuarios:
                 "Perfis com + combinam departamentos relacionados. "
                 "Permissões específicas podem ser ajustadas depois."
             ),
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=CORES["text_muted"],
             bg=CORES["card"],
             justify="left",
@@ -242,7 +243,7 @@ class TelaUsuarios:
         self.label_status = tk.Label(
             painel,
             text="",
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=CORES["warning"],
             bg=CORES["card"],
             wraplength=285,
@@ -252,7 +253,7 @@ class TelaUsuarios:
         tk.Button(
             painel,
             text="+  CADASTRAR USUÁRIO",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["primary"],
             fg="#FFFFFF",
             activebackground=CORES["primary_hover"],
@@ -289,7 +290,7 @@ class TelaUsuarios:
         return tk.Button(
             parent,
             text=texto,
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             bg=CORES["card_hover"],
             fg=CORES["text"],
             activebackground=CORES["border"],
@@ -304,7 +305,7 @@ class TelaUsuarios:
         tk.Label(
             parent,
             text=titulo.upper(),
-            font=("Segoe UI", 8, "bold"),
+            font=("Inter", 8, "bold"),
             fg=CORES["text_sec"],
             bg=CORES["card"],
         ).pack(anchor="w", padx=25, pady=(8, 4))
@@ -312,7 +313,7 @@ class TelaUsuarios:
         moldura.pack(fill="x", padx=25)
         entry = tk.Entry(
             moldura,
-            font=("Segoe UI", 10),
+            font=("Inter", 10),
             bg=CORES["input"],
             fg=CORES["text"],
             insertbackground=CORES["primary"],
@@ -477,7 +478,7 @@ class TelaUsuarios:
         tk.Label(
             janela,
             text="Alterar perfil de acesso",
-            font=("Segoe UI", 18, "bold"),
+            font=("Inter", 18, "bold"),
             fg=CORES["text"],
             bg=CORES["bg"],
         ).pack(anchor="w", padx=28, pady=(24, 4))
@@ -487,7 +488,7 @@ class TelaUsuarios:
                 "O novo perfil substituirá as permissões personalizadas "
                 "atuais nesta empresa."
             ),
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text_sec"],
             bg=CORES["bg"],
             wraplength=410,
@@ -509,7 +510,7 @@ class TelaUsuarios:
         status = tk.Label(
             janela,
             text="",
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=CORES["danger_muted"],
             bg=CORES["bg"],
         )
@@ -548,7 +549,7 @@ class TelaUsuarios:
             rodape,
             text="CANCELAR",
             command=janela.destroy,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["card_secundario"],
             fg=CORES["text"],
             relief="flat",
@@ -560,7 +561,7 @@ class TelaUsuarios:
             rodape,
             text="APLICAR PERFIL",
             command=salvar,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["primary"],
             fg="#FFFFFF",
             relief="flat",
@@ -595,7 +596,7 @@ class TelaUsuarios:
         tk.Label(
             janela,
             text="Permissões por módulo",
-            font=("Segoe UI", 19, "bold"),
+            font=("Inter", 19, "bold"),
             fg=CORES["text"],
             bg=CORES["bg"],
         ).pack(anchor="w", padx=28, pady=(24, 4))
@@ -605,7 +606,7 @@ class TelaUsuarios:
                 "Leitura controla a visibilidade. Escrita permite cadastros; "
                 "aprovação autoriza decisões humanas."
             ),
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text_sec"],
             bg=CORES["bg"],
         ).pack(anchor="w", padx=28, pady=(0, 15))
@@ -621,7 +622,7 @@ class TelaUsuarios:
             tk.Label(
                 painel,
                 text=texto,
-                font=("Segoe UI", 8, "bold"),
+                font=("Inter", 8, "bold"),
                 fg=CORES["primary"],
                 bg=CORES["card"],
                 width=largura,
@@ -632,7 +633,7 @@ class TelaUsuarios:
             tk.Label(
                 painel,
                 text=f'{MODULOS[modulo]["icone"]}  {MODULOS[modulo]["nome"]}',
-                font=("Segoe UI", 9),
+                font=("Inter", 9),
                 fg=CORES["text"],
                 bg=CORES["card"],
                 anchor="w",
@@ -656,7 +657,7 @@ class TelaUsuarios:
             rodape,
             text="CANCELAR",
             command=janela.destroy,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["card_secundario"],
             fg=CORES["text"],
             relief="flat",
@@ -668,7 +669,7 @@ class TelaUsuarios:
             rodape,
             text="SALVAR PERMISSÕES",
             command=lambda: self._salvar_permissoes(usuario, janela),
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=CORES["primary"],
             fg="#FFFFFF",
             relief="flat",

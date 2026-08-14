@@ -1,6 +1,6 @@
 # Agente TI · Instalação no computador monitorado
 
-O computador monitorado recebe somente o `DataIntelligenceTIAgent.exe` e os scripts auxiliares. Ele envia inventário e telemetria ao Servidor Corporativo V9.1.
+O computador monitorado recebe somente o `DataIntelligenceTIAgent.exe` e os scripts auxiliares. Ele envia inventário e telemetria ao Servidor Corporativo V10.1.1.
 
 ## Antes de instalar
 
@@ -11,7 +11,7 @@ Na Central, abra Tecnologia → Ativos gerenciados, crie/vincule o ativo e use *
 - Agent ID;
 - token temporário.
 
-Na V9.1 a URL é a do Servidor Corporativo, por exemplo:
+Na V10.1.1 a URL é a do Servidor Corporativo, por exemplo:
 
 ```text
 http://192.168.1.4:8770
@@ -51,7 +51,7 @@ O token será solicitado de forma oculta.
 O agente é instalado em:
 
 ```text
-C:\Program Files\DataIntelligence\TIAgent
+C:\Program Files\Data Intelligence\TIAgent
 ```
 
 Dados operacionais:
@@ -69,7 +69,7 @@ C:\ProgramData\DataIntelligence\TIAgent
 ou:
 
 ```powershell
-& "C:\Program Files\DataIntelligence\TIAgent\DataIntelligenceTIAgent.exe" once
+& "C:\Program Files\Data Intelligence\TIAgent\DataIntelligenceTIAgent.exe" once
 ```
 
 O heartbeat deve retornar HTTP 202.

@@ -43,7 +43,7 @@ def carregar_config() -> ServidorTIConfig:
     if not origem.is_file():
         return ServidorTIConfig()
     try:
-        dados = json.loads(origem.read_text(encoding="utf-8"))
+        dados = json.loads(origem.read_text(encoding="utf-8-sig"))
         permitidos = {"habilitado", "host", "porta", "tls", "certificado", "chave_privada"}
         dados = {k: v for k, v in dados.items() if k in permitidos}
         return ServidorTIConfig(**dados).validar()

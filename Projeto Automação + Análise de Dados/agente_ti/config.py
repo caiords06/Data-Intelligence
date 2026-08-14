@@ -139,7 +139,7 @@ def carregar_configuracao(caminho: str | Path | None = None) -> AgentConfig:
     origem = Path(caminho) if caminho else caminho_config_padrao()
     if not origem.is_file():
         raise FileNotFoundError(f"Configuração do agente não encontrada: {origem}")
-    dados = json.loads(origem.read_text(encoding="utf-8"))
+    dados = json.loads(origem.read_text(encoding="utf-8-sig"))
     campos = {
         "servidor_url", "patrimonio", "agent_id", "intervalo_segundos",
         "timeout_segundos", "verificar_tls", "ca_bundle", "provedor_remoto",

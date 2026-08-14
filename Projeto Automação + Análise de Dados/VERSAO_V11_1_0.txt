@@ -1,0 +1,16 @@
+Data Intelligence Enterprise Platform V11.1.0
+
+Release de governança legal e correções transversais pós-homologação:
+- execução desktop sem privilégios administrativos;
+- tema claro/escuro persistente entre login e sessão;
+- relatórios de RH em PDF, XLSX e CSV no Servidor Corporativo;
+- foto governada no cabeçalho do Funcionário 360°;
+- Analytics executivo restrito a gestão/diretoria;
+- navegação lateral mais colorida e scrollbar visível;
+- remoção lógica, restauração, concorrência e auditoria dos registros.
+- Central de Conformidade: RoPA, titulares, incidentes, RIPD, terceiros, legal hold e decisões analíticas;
+- TLS obrigatório fora de loopback e SSL obrigatório para PostgreSQL remoto;
+- política e autorização efêmera para acesso remoto, sem habilitar canal remoto nesta versão;
+- marca fornecida pelo titular e tokens tipográficos Manrope/Inter.
+
+Controles técnicos não constituem certificação nem garantia automática de conformidade legal.

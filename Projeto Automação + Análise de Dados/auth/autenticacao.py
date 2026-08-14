@@ -49,6 +49,9 @@ def _usuario_publico(registro) -> dict:
         "perfil_acesso": perfil_acesso,
         "email_corporativo": (registro["email_corporativo"] if "email_corporativo" in registro.keys() else None),
         "sessao_epoch": int((registro["sessao_epoch"] if "sessao_epoch" in registro.keys() else 0) or 0),
+        "mfa_habilitado": bool(
+            registro["mfa_habilitado"] if "mfa_habilitado" in registro.keys() else 0
+        ),
         "ativo": bool(registro["ativo"]),
     }
 
@@ -112,6 +115,7 @@ def _criar_usuario(
         "perfil_acesso": perfil_acesso,
         "email_corporativo": email_corporativo,
         "sessao_epoch": 0,
+        "mfa_habilitado": False,
         "ativo": True,
     }
 
@@ -190,11 +194,11 @@ def _bloqueio_ativo(valor: str | None) -> bool:
         return False
 
 
-def autenticar_usuario(usuario, senha) -> dict:
+def autenticar_usuario(usuario, senha, codigo_mfa=None) -> dict:
     from core.nodo import usa_servidor_remoto
     if usa_servidor_remoto():
         from enterprise.servidor_cliente import login_remoto
-        return login_remoto(str(usuario), str(senha))
+        return login_remoto(str(usuario), str(senha), codigo_mfa=str(codigo_mfa or ""))
     login = str(usuario).strip().lower()
     registro = buscar_usuario(login)
     if registro is None:
@@ -224,9 +228,27 @@ def autenticar_usuario(usuario, senha) -> dict:
         registrar_auditoria("login_conta_inativa", alvo_usuario_id=registro["id"])
         raise PermissionError("Este usuário está desativado.")
 
+    if bool(registro["mfa_habilitado"] if "mfa_habilitado" in registro.keys() else 0):
+        from auth.mfa import validar_segundo_fator
+        if not validar_segundo_fator(int(registro["id"]), str(codigo_mfa or "")):
+            bloqueado = registrar_falha_autenticacao(registro["id"])
+            registrar_auditoria(
+                "falha_mfa",
+                alvo_usuario_id=registro["id"],
+                detalhes="conta_bloqueada" if bloqueado else None,
+            )
+            if bloqueado:
+                raise PermissionError(
+                    "Muitas tentativas inválidas. A conta foi bloqueada por 5 minutos."
+                )
+            raise PermissionError("Informe um código MFA ou de recuperação válido.")
+
     limpar_falhas_autenticacao(registro["id"])
     registrar_login(registro["id"])
-    registrar_auditoria("login_sucesso", usuario_id=registro["id"])
+    registrar_auditoria(
+        "login_sucesso", usuario_id=registro["id"],
+        detalhes="mfa" if bool(registro["mfa_habilitado"] if "mfa_habilitado" in registro.keys() else 0) else "senha",
+    )
     return _usuario_publico(registro)
 
 
@@ -239,7 +261,7 @@ def obter_usuarios(ator=None) -> list[dict]:
     return listar_usuarios()
 
 
-def definir_status_usuario(usuario_id, ativo, ator=None) -> None:
+def definir_status_usuario(usuario_id, ativo, ator=None, *, expected_epoch: int | None = None) -> None:
     _exigir_admin(ator)
     from core.nodo import usa_servidor_remoto
     if usa_servidor_remoto():
@@ -258,7 +280,7 @@ def definir_status_usuario(usuario_id, ativo, ator=None) -> None:
         and contar_administradores_ativos() <= 1
     ):
         raise ValueError("Não é possível desativar o último administrador ativo.")
-    alterar_status_usuario(int(usuario_id), bool(ativo))
+    alterar_status_usuario(int(usuario_id), bool(ativo), expected_epoch=expected_epoch)
     registrar_auditoria(
         "usuario_ativado" if ativo else "usuario_desativado",
         usuario_id=ator["id"],
@@ -266,7 +288,7 @@ def definir_status_usuario(usuario_id, ativo, ator=None) -> None:
     )
 
 
-def redefinir_senha(usuario_id, nova_senha, ator=None) -> None:
+def redefinir_senha(usuario_id, nova_senha, ator=None, *, expected_epoch: int | None = None) -> None:
     _exigir_admin(ator)
     from core.nodo import usa_servidor_remoto
     if usa_servidor_remoto():
@@ -276,7 +298,7 @@ def redefinir_senha(usuario_id, nova_senha, ator=None) -> None:
     if buscar_usuario_por_id(int(usuario_id)) is None:
         raise ValueError("Usuário não encontrado.")
     senha_hash, salt = gerar_hash_senha(nova_senha)
-    atualizar_senha_usuario(int(usuario_id), senha_hash, salt)
+    atualizar_senha_usuario(int(usuario_id), senha_hash, salt, expected_epoch=expected_epoch)
     registrar_auditoria(
         "senha_redefinida",
         usuario_id=ator["id"],
@@ -288,6 +310,8 @@ def definir_perfil_acesso_usuario(
     usuario_id: int,
     perfil_acesso: str,
     ator=None,
+    *,
+    expected_epoch: int | None = None,
 ) -> None:
     _exigir_admin(ator)
     from core.nodo import usa_servidor_remoto
@@ -303,7 +327,7 @@ def definir_perfil_acesso_usuario(
             "O perfil do administrador é fixo e possui acesso integral."
         )
     codigo = validar_perfil_acesso(perfil_acesso)
-    alterar_perfil_acesso_usuario(int(usuario_id), codigo)
+    alterar_perfil_acesso_usuario(int(usuario_id), codigo, expected_epoch=expected_epoch)
     registrar_auditoria(
         "perfil_acesso_alterado",
         usuario_id=ator["id"],

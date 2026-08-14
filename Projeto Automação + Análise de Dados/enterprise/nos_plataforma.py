@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import re
 import secrets
@@ -164,7 +165,14 @@ def carregar_segredo_no(no: dict) -> str:
             except Exception:
                 # A leitura continua válida; uma próxima manutenção pode repetir
                 # a migração caso o DPAPI esteja indisponível neste momento.
-                pass
+                logging.getLogger(__name__).exception("Migração DPAPI da credencial do nó falhou")
     if hashlib.sha256(segredo.encode("utf-8")).hexdigest() != no.get("token_hash"):
         raise PermissionError("Credencial do nó não passou na verificação de integridade.")
     return segredo
+
+
+# Compatibilidade legada: se a tela for alcançada em Central/Cliente, o CRUD
+# ainda assim é executado no Servidor Corporativo, nunca no cache local.
+from core.rpc_central import instalar_proxy_modulo as _instalar_proxy_modulo
+_instalar_proxy_modulo(globals(), __name__)
+del _instalar_proxy_modulo

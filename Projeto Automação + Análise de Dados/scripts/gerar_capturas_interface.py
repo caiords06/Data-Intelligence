@@ -28,6 +28,7 @@ if str(RAIZ_PROJETO) not in sys.path:
 from auth import banco
 from auth.autenticacao import criar_admin_inicial
 from auth.sessao import SESSAO
+from configuracoes.preferencias import PREFERENCIAS_PADRAO, salvar_preferencias
 from enterprise.banco import inicializar_enterprise
 from enterprise.contexto import obter_contexto
 from historico.repositorio import inicializar_historico
@@ -40,7 +41,7 @@ from interface.captura_visual import (
     habilitar_dpi_windows,
     salvar_manifesto,
 )
-from interface.tema import CORES, configurar_estilos_ttk
+from interface.tema import CORES, aplicar_paleta, configurar_estilos_ttk, normalizar_tema
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,10 @@ def construir_catalogo(escopo: str = "completo") -> list[CasoVisual]:
     from interface.financeiro import GRUPOS_MENU as MENU_FINANCEIRO, TelaFinanceiro
     from interface.historico import TelaHistorico
     from interface.login import TelaLogin
+    from interface.marketing import GRUPOS_MENU as MENU_MARKETING, TelaMarketing
+    from interface.comercial import GRUPOS_MENU as MENU_COMERCIAL, TelaComercial
+    from interface.administrativo import GRUPOS_MENU as MENU_ADMINISTRATIVO, TelaAdministrativo
+    from interface.juridico import GRUPOS_MENU as MENU_JURIDICO, TelaJuridico
     from interface.modulo_empresarial import TelaModuloEmpresarial
     from interface.navegacao_analytics import MENU_ANALYTICS
     from interface.notificacoes import TelaNotificacoes
@@ -136,39 +141,22 @@ def construir_catalogo(escopo: str = "completo") -> list[CasoVisual]:
         ("Estoque", MENU_ESTOQUE, TelaEstoque, "visao"),
         ("Compras", MENU_COMPRAS, TelaCompras, "visao"),
         ("Tecnologia", MENU_TI, TelaTecnologia, "portal"),
+        ("Marketing", MENU_MARKETING, TelaMarketing, "visao"),
+        ("Comercial", MENU_COMERCIAL, TelaComercial, "visao"),
+        ("Administrativo", MENU_ADMINISTRATIVO, TelaAdministrativo, "visao"),
+        ("Jurídico", MENU_JURIDICO, TelaJuridico, "visao"),
     )
     for grupo, menu, classe, secao_inicial in especializados:
         secoes = [chave for _titulo_grupo, itens in menu for chave, _icone, _titulo in itens]
         if escopo == "essencial":
             secoes = [secao_inicial]
         for secao in secoes:
-            if secao == "visao" and grupo != "Tecnologia":
-                mapa_modulo = {"Financeiro":"financeiro", "Recursos Humanos":"rh", "Estoque":"estoque", "Compras":"compras"}
-                fabrica = lambda r, m=mapa_modulo[grupo]: TelaExperienciaDepartamental(r, navegacao, m)
-            else:
-                fabrica = lambda r, c=classe, sec=secao: c(r, navegacao, secao=sec)
+            # A captura deve exercitar exatamente a mesma tela que o roteador
+            # principal usa. Até a V9.3 a Visão geral dos módulos especializados
+            # era fotografada por TelaExperienciaDepartamental, criando uma
+            # leftbox diferente daquela exibida nas páginas internas.
+            fabrica = lambda r, c=classe, sec=secao: c(r, navegacao, secao=sec)
             casos.append(CasoVisual(f"{grupo} · {secao}", grupo, fabrica))
-
-    genericos = ("marketing", "administrativo", "juridico", "comercial")
-    visuais = {
-        "marketing": {"registros", "calendario", "automacao", "conteudo"},
-        "administrativo": {"registros", "facilities", "viagens", "reembolsos", "veiculos", "salas"},
-        "juridico": {"registros", "processos", "prazos", "audiencias", "riscos"},
-        "comercial": {"registros", "crm", "pipeline", "propostas", "metas"},
-    }
-    for modulo in genericos:
-        configuracao = PAINEIS_MODULOS[modulo]
-        secoes = [chave for chave, _icone, _titulo in configuracao["menu"]]
-        if escopo == "essencial":
-            secoes = ["visao"]
-        for secao in secoes:
-            if secao == "visao":
-                fabrica = lambda r, m=modulo: TelaExperienciaDepartamental(r, navegacao, m)
-            elif secao in visuais[modulo]:
-                fabrica = lambda r, m=modulo, sec=secao: TelaOperacaoVisual(r, navegacao, m, secao=sec)
-            else:
-                fabrica = lambda r, m=modulo, sec=secao: TelaPainelModulo(r, navegacao, m, secao=sec)
-            casos.append(CasoVisual(f"{configuracao['titulo']} · {secao}", modulo.title(), fabrica))
 
     for ferramenta in (
         "tarefas", "documentos", "workflows", "integracoes", "relatorios", "auditoria",
@@ -191,6 +179,15 @@ def banco_visual_temporario():
         with (
             patch.object(banco, "DB_PATH", pasta / "interface_visual.db"),
             patch.object(banco, "STORAGE_DIR", pasta),
+            patch.dict(
+                os.environ,
+                {
+                    "DATA_INTELLIGENCE_DB_BACKEND": "sqlite",
+                    "DATA_INTELLIGENCE_ENABLE_LEGACY_SQLITE": "1",
+                    "DATA_INTELLIGENCE_NODE_ROLE": "standalone",
+                },
+                clear=False,
+            ),
         ):
             banco.inicializar_banco()
             admin = criar_admin_inicial(
@@ -230,8 +227,12 @@ def executar_capturas(
     altura: int = 900,
     espera_ms: int = 180,
     falhar_em_erro: bool = False,
+    grupo: str | None = None,
+    tema: str = "escuro",
 ) -> list[dict]:
     habilitar_dpi_windows()
+    tema = normalizar_tema(tema)
+    aplicar_paleta(tema)
     destino = Path(destino).resolve()
     destino.mkdir(parents=True, exist_ok=True)
     # Uma execução representa um snapshot completo. Remover apenas artefatos
@@ -243,7 +244,16 @@ def executar_capturas(
     resultados: list[dict] = []
 
     with banco_visual_temporario():
+        preferencias_visuais = dict(PREFERENCIAS_PADRAO)
+        preferencias_visuais["tema_interface"] = tema
+        salvar_preferencias(preferencias_visuais)
         casos = construir_catalogo(escopo)
+        if grupo:
+            alvo = _slug(grupo)
+            casos = [caso for caso in casos if _slug(caso.grupo) == alvo]
+            if not casos:
+                disponiveis = ", ".join(sorted({caso.grupo for caso in construir_catalogo(escopo)}))
+                raise ValueError(f"Grupo visual desconhecido: {grupo}. Disponíveis: {disponiveis}")
         total = len(casos)
         for indice, caso in enumerate(casos, 1):
             print(f"[{indice:03d}/{total:03d}] {caso.nome}", flush=True)
@@ -271,7 +281,7 @@ def executar_capturas(
                     largura_minima=min(800, largura_real),
                     altura_minima=min(600, altura_real),
                 )
-                resultado.update(tela=caso.nome, grupo=caso.grupo, layout=layout)
+                resultado.update(tela=caso.nome, grupo=caso.grupo, tema=tema, layout=layout)
                 if layout["widgets_fora_da_janela"]:
                     resultado["status"] = "reprovada"
                     resultado["falhas"].append(
@@ -293,6 +303,7 @@ def executar_capturas(
                 resultado = {
                     "tela": caso.nome,
                     "grupo": caso.grupo,
+                    "tema": tema,
                     "arquivo": caminho.name,
                     "caminho": str(caminho),
                     "largura": 0,
@@ -324,6 +335,42 @@ def executar_capturas(
     return resultados
 
 
+
+def executar_matriz_capturas(
+    destino: str | Path,
+    *,
+    escopo: str = "completo",
+    temas=("escuro", "claro"),
+    resolucoes=((1024, 680), (1366, 768), (1600, 900), (1920, 1080)),
+    espera_ms: int = 180,
+    falhar_em_erro: bool = False,
+    grupo: str | None = None,
+) -> dict:
+    """Executa a auditoria V10.2.1 em temas e resoluções de homologação."""
+    destino = Path(destino).resolve()
+    resumo = {"rodadas": [], "reprovadas": 0, "alertas": 0, "aprovadas": 0}
+    for tema in temas:
+        tema = normalizar_tema(tema)
+        for largura, altura in resolucoes:
+            pasta = destino / tema / f"{int(largura)}x{int(altura)}"
+            resultados = executar_capturas(
+                pasta, escopo=escopo, largura=int(largura), altura=int(altura),
+                espera_ms=espera_ms, falhar_em_erro=False, grupo=grupo, tema=tema,
+            )
+            rodada = {
+                "tema": tema, "largura": int(largura), "altura": int(altura),
+                "aprovadas": sum(x["status"] == "aprovada" for x in resultados),
+                "alertas": sum(x["status"] == "alerta" for x in resultados),
+                "reprovadas": sum(x["status"] == "reprovada" for x in resultados),
+                "pasta": str(pasta),
+            }
+            resumo["rodadas"].append(rodada)
+            for chave in ("aprovadas", "alertas", "reprovadas"):
+                resumo[chave] += rodada[chave]
+    if falhar_em_erro and resumo["reprovadas"]:
+        raise RuntimeError(f"{resumo['reprovadas']} captura(s) reprovada(s) na matriz visual V10.2.1.")
+    return resumo
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -335,6 +382,9 @@ def main() -> int:
     parser.add_argument("--largura", type=int, default=1600)
     parser.add_argument("--altura", type=int, default=900)
     parser.add_argument("--espera-ms", type=int, default=180)
+    parser.add_argument("--grupo", help="Gera somente um grupo, por exemplo: Tecnologia ou Financeiro.")
+    parser.add_argument("--tema", choices=("escuro", "claro", "ambos"), default="escuro")
+    parser.add_argument("--matriz", action="store_true", help="Executa dark/light em 1024x680, 1366x768, 1600x900 e 1920x1080.")
     parser.add_argument("--falhar-em-erro", action="store_true")
     argumentos = parser.parse_args()
 
@@ -343,14 +393,25 @@ def main() -> int:
             "Nenhum display gráfico foi detectado. Execute no Windows ou use "
             "Xvfb em um ambiente Linux com Tk instalado."
         )
-    executar_capturas(
-        argumentos.destino,
-        escopo=argumentos.escopo,
-        largura=argumentos.largura,
-        altura=argumentos.altura,
-        espera_ms=argumentos.espera_ms,
-        falhar_em_erro=argumentos.falhar_em_erro,
-    )
+    if argumentos.matriz:
+        executar_matriz_capturas(
+            argumentos.destino, escopo=argumentos.escopo, espera_ms=argumentos.espera_ms,
+            falhar_em_erro=argumentos.falhar_em_erro, grupo=argumentos.grupo,
+            temas=("escuro", "claro") if argumentos.tema == "ambos" else (argumentos.tema,),
+        )
+    elif argumentos.tema == "ambos":
+        for tema in ("escuro", "claro"):
+            executar_capturas(
+                Path(argumentos.destino) / tema, escopo=argumentos.escopo,
+                largura=argumentos.largura, altura=argumentos.altura, espera_ms=argumentos.espera_ms,
+                falhar_em_erro=argumentos.falhar_em_erro, grupo=argumentos.grupo, tema=tema,
+            )
+    else:
+        executar_capturas(
+            argumentos.destino, escopo=argumentos.escopo, largura=argumentos.largura,
+            altura=argumentos.altura, espera_ms=argumentos.espera_ms,
+            falhar_em_erro=argumentos.falhar_em_erro, grupo=argumentos.grupo, tema=argumentos.tema,
+        )
     return 0
 
 

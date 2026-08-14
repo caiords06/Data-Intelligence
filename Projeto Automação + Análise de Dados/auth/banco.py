@@ -1,7 +1,8 @@
-"""Persistência local de usuários em SQLite."""
+"""Persistência transacional centralizada. PostgreSQL é o backend obrigatório em produção."""
 
 import sqlite3
 import json
+import os
 import platform
 from uuid import uuid4
 from contextlib import contextmanager
@@ -9,14 +10,58 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.caminhos import pasta_dados
+from core.versao import VERSAO_INTERFACE
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 STORAGE_DIR = pasta_dados()
 DB_PATH = STORAGE_DIR / "app.db"
 
 
+class ConcorrenciaConflito(ValueError):
+    """A versão informada pelo cliente não é mais a atual."""
+
+
+def _distinguir_conflito(conexao, usuario_id: int) -> None:
+    existe = conexao.execute("SELECT 1 FROM usuarios WHERE id=?", (int(usuario_id),)).fetchone()
+    if existe is None:
+        raise ValueError("Usuário não encontrado.")
+    raise ConcorrenciaConflito("O usuário foi alterado por outra sessão; recarregue os dados.")
+
+
+def _papel_estacao_configurado() -> str | None:
+    """Lê apenas o papel do nó, sem inicializar banco nem assumir fallback.
+
+    Esta checagem existe como barreira arquitetural: mesmo que um módulo da UI
+    esqueça o wrapper RPC, Central/Cliente jamais podem abrir uma conexão SQL.
+    O Servidor Corporativo é a única autoridade de persistência.
+    """
+    papel_env = str(os.environ.get("DATA_INTELLIGENCE_NODE_ROLE", "")).strip().lower()
+    if papel_env:
+        return papel_env
+    try:
+        override = str(os.environ.get("DATA_INTELLIGENCE_NODE_CONFIG", "")).strip()
+        caminho = Path(override).expanduser().resolve() if override else pasta_dados() / "node.json"
+        if not caminho.is_file():
+            return None
+        bruto = json.loads(caminho.read_text(encoding="utf-8-sig"))
+        if isinstance(bruto, dict):
+            return str(bruto.get("papel") or "").strip().lower() or None
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    return None
+
+
+def _garantir_autoridade_banco() -> None:
+    papel = _papel_estacao_configurado()
+    if papel in {"central", "cliente"}:
+        raise RuntimeError(
+            "A estação Central/Cliente não pode abrir banco de dados diretamente. "
+            "Esta operação deve ser executada no Servidor Corporativo via RPC/API."
+        )
+
+
 @contextmanager
-def conectar():
+def _conectar_sqlite():
     """Abre uma conexão transacional segura e garante seu fechamento.
 
     O SQLite desativa chaves estrangeiras por conexão. A ativação precisa
@@ -44,7 +89,49 @@ def conectar():
         conexao.close()
 
 
+
+def backend_banco() -> str:
+    """Retorna o backend transacional do processo.
+
+    PostgreSQL é o padrão e a única opção aceita em execução normal. SQLite
+    permanece somente como ferramenta explícita de migração/testes legados;
+    nunca existe fallback automático para um banco local.
+    """
+    valor = str(os.environ.get("DATA_INTELLIGENCE_DB_BACKEND", "postgresql")).strip().lower()
+    if valor in {"postgres", "postgresql", "pg", ""}:
+        return "postgresql"
+    if valor == "sqlite":
+        legado = str(os.environ.get("DATA_INTELLIGENCE_ENABLE_LEGACY_SQLITE", "")).strip().lower()
+        if legado in {"1", "true", "yes", "sim"}:
+            return "sqlite"
+        raise RuntimeError(
+            "SQLite local está desativado. Configure o Servidor Corporativo com PostgreSQL "
+            "ou habilite DATA_INTELLIGENCE_ENABLE_LEGACY_SQLITE=1 somente para migração/testes."
+        )
+    raise ValueError(f"Backend de banco inválido: {valor}")
+
+
+@contextmanager
+def conectar():
+    _garantir_autoridade_banco()
+    if backend_banco() == "postgresql":
+        from enterprise.postgresql.adapter import conectar_postgresql
+        with conectar_postgresql() as conexao:
+            yield conexao
+        return
+    with _conectar_sqlite() as conexao:
+        yield conexao
+
+
+def banco_central_postgresql() -> bool:
+    return backend_banco() == "postgresql"
+
 def inicializar_banco() -> None:
+    _garantir_autoridade_banco()
+    if backend_banco() == "postgresql":
+        from enterprise.postgresql.bootstrap import inicializar_schema_postgresql
+        inicializar_schema_postgresql()
+        return
     with conectar() as conexao:
         conexao.execute(
             """
@@ -164,7 +251,8 @@ def inserir_usuario(
         )
         usuario_id = int(cursor.lastrowid)
         existe_vinculo = conexao.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='usuarios_empresas'"
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            ("usuarios_empresas",),
         ).fetchone()
         if existe_vinculo:
             if perfil == "admin":
@@ -284,28 +372,42 @@ def listar_usuarios() -> list[dict]:
     return [dict(registro) for registro in registros]
 
 
-def alterar_status_usuario(usuario_id: int, ativo: bool) -> None:
+def alterar_status_usuario(usuario_id: int, ativo: bool, *, expected_epoch: int | None = None) -> None:
     with conectar() as conexao:
+        filtro = "" if expected_epoch is None else " AND sessao_epoch=?"
+        parametros = [1 if ativo else 0, int(usuario_id)]
+        if expected_epoch is not None:
+            parametros.append(int(expected_epoch))
         cursor = conexao.execute(
-            "UPDATE usuarios SET ativo = ?, sessao_epoch = COALESCE(sessao_epoch,0) + 1 WHERE id = ?",
-            (1 if ativo else 0, usuario_id),
+            "UPDATE usuarios SET ativo = ?, sessao_epoch = COALESCE(sessao_epoch,0) + 1 WHERE id = ?" + filtro,
+            tuple(parametros),
         )
         if cursor.rowcount == 0:
-            raise ValueError("Usuário não encontrado.")
+            _distinguir_conflito(conexao, usuario_id)
 
 
-def alterar_perfil_acesso_usuario(usuario_id: int, perfil_acesso: str) -> None:
+def alterar_perfil_acesso_usuario(usuario_id: int, perfil_acesso: str, *, expected_epoch: int | None = None) -> None:
     with conectar() as conexao:
+        filtro = "" if expected_epoch is None else " AND sessao_epoch=?"
+        parametros = [str(perfil_acesso), int(usuario_id)]
+        if expected_epoch is not None:
+            parametros.append(int(expected_epoch))
         cursor = conexao.execute(
-            "UPDATE usuarios SET perfil_acesso = ?, sessao_epoch = COALESCE(sessao_epoch,0) + 1 WHERE id = ?",
-            (str(perfil_acesso), int(usuario_id)),
+            "UPDATE usuarios SET perfil_acesso = ?, sessao_epoch = COALESCE(sessao_epoch,0) + 1 WHERE id = ?" + filtro,
+            tuple(parametros),
         )
         if cursor.rowcount == 0:
-            raise ValueError("Usuário não encontrado.")
+            _distinguir_conflito(conexao, usuario_id)
 
 
-def atualizar_senha_usuario(usuario_id: int, senha_hash: str, salt: str) -> None:
+def atualizar_senha_usuario(
+    usuario_id: int, senha_hash: str, salt: str, *, expected_epoch: int | None = None,
+) -> None:
     with conectar() as conexao:
+        filtro = "" if expected_epoch is None else " AND sessao_epoch=?"
+        parametros = [senha_hash, salt, int(usuario_id)]
+        if expected_epoch is not None:
+            parametros.append(int(expected_epoch))
         cursor = conexao.execute(
             """
             UPDATE usuarios
@@ -315,26 +417,32 @@ def atualizar_senha_usuario(usuario_id: int, senha_hash: str, salt: str) -> None
                 bloqueado_ate = NULL,
                 sessao_epoch = COALESCE(sessao_epoch,0) + 1
             WHERE id = ?
-            """,
-            (senha_hash, salt, usuario_id),
+            """ + filtro,
+            tuple(parametros),
         )
         if cursor.rowcount == 0:
-            raise ValueError("Usuário não encontrado.")
+            _distinguir_conflito(conexao, usuario_id)
 
 
 
-def atualizar_email_corporativo_usuario(usuario_id: int, email: str) -> None:
+def atualizar_email_corporativo_usuario(
+    usuario_id: int, email: str, *, expected_epoch: int | None = None,
+) -> None:
     email = str(email or "").strip().lower()
     if not email or "@" not in email:
         raise ValueError("Informe um e-mail corporativo válido.")
     try:
         with conectar() as conexao:
+            filtro = "" if expected_epoch is None else " AND sessao_epoch=?"
+            parametros = [email, int(usuario_id)]
+            if expected_epoch is not None:
+                parametros.append(int(expected_epoch))
             cursor = conexao.execute(
-                "UPDATE usuarios SET email_corporativo=?, sessao_epoch=COALESCE(sessao_epoch,0)+1 WHERE id=?",
-                (email, int(usuario_id)),
+                "UPDATE usuarios SET email_corporativo=?, sessao_epoch=COALESCE(sessao_epoch,0)+1 WHERE id=?" + filtro,
+                tuple(parametros),
             )
             if cursor.rowcount == 0:
-                raise ValueError("Usuário não encontrado.")
+                _distinguir_conflito(conexao, usuario_id)
     except sqlite3.IntegrityError as erro:
         raise ValueError("Este e-mail corporativo já está em uso.") from erro
 
@@ -413,7 +521,7 @@ def registrar_auditoria(
                     if dados_depois is not None
                     else None,
                     operacao_id or f"AUD-{uuid4().hex[:12].upper()}",
-                    "V8.2",
+                    VERSAO_INTERFACE,
                     platform.node()[:120],
                 ),
             )

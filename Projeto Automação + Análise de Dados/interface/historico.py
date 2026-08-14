@@ -1,5 +1,6 @@
 """Tela funcional de consulta do histórico de análises."""
 
+from core.versao import VERSAO_INTERFACE
 import json
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -48,7 +49,7 @@ class TelaHistorico:
             "Histórico de análises",
             "Consulte resultados anteriores sem armazenar as planilhas originais.",
             breadcrumb="CENTRAL DA APLICAÇÃO  /  HISTÓRICO ANALÍTICO",
-            etiqueta="RASTREÁVEL V9.0",
+            etiqueta=f"RASTREÁVEL {VERSAO_INTERFACE}",
         )
 
         tabela_frame = tk.Frame(
@@ -128,7 +129,7 @@ class TelaHistorico:
         self.status = tk.Label(
             acoes,
             text="",
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text_sec"],
             bg=CORES["bg"],
         )
@@ -142,7 +143,7 @@ class TelaHistorico:
             parent,
             text=texto,
             command=comando,
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", 9, "bold"),
             bg=fundo,
             fg="#FFFFFF",
             activebackground=CORES["card_hover"],

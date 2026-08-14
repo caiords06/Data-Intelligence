@@ -1,0 +1,5 @@
+Data Intelligence Enterprise Platform
+Versão: 9.7.0
+Interface: V9.7
+Linha: RH/Estoque Componentizados + Biblioteca Visual Departamental
+Python oficial de release: 3.14

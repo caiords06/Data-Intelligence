@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import atexit
 import logging
-from logging.handlers import RotatingFileHandler
 import threading
 import time
 
 from auth import banco
 from servidor_ti.app import criar_servidor
 from servidor_ti.config import carregar_config, url_lan_sugerida
+from core.ciclo_vida import aguardar_thread, encerrar_servidor, iniciar_servidor_em_thread
+from core.observabilidade import configurar_logger_rotativo
 
 _LOCK = threading.RLock()
 _SERVIDOR = None
@@ -21,16 +22,12 @@ _ERRO = None
 
 
 def _logger():
-    logger = logging.getLogger("data_intelligence.ti_server")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    destino = banco.STORAGE_DIR / "ti-server.log"
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    if not logger.handlers:
-        handler = RotatingFileHandler(destino, maxBytes=2 * 1024 * 1024, backupCount=4, encoding="utf-8")
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-        logger.addHandler(handler)
-    return logger
+    return configurar_logger_rotativo(
+        "data_intelligence.ti_server",
+        banco.STORAGE_DIR / "ti-server.log",
+        max_bytes=2 * 1024 * 1024,
+        backups=4,
+    )
 
 
 def _monitorar_offline():
@@ -72,8 +69,7 @@ def iniciar_servidor_embutido() -> dict:
             return status_servidor()
         _SERVIDOR = servidor
         _PARAR.clear()
-        _THREAD = threading.Thread(target=servidor.serve_forever, name="TI-Agent-API", daemon=True)
-        _THREAD.start()
+        _THREAD = iniciar_servidor_em_thread(servidor, nome="TI-Agent-API", daemon=True)
         _MONITOR = threading.Thread(target=_monitorar_offline, name="TI-Agent-Offline-Monitor", daemon=True)
         _MONITOR.start()
         _ERRO = None
@@ -87,18 +83,23 @@ def parar_servidor_embutido() -> None:
         _PARAR.set()
         servidor = _SERVIDOR
         _SERVIDOR = None
+        thread = _THREAD
+        monitor = _MONITOR
         if servidor is not None:
             try:
-                servidor.shutdown()
-                servidor.server_close()
+                encerrar_servidor(servidor, thread, timeout=3.0)
             except OSError:
                 pass
+        aguardar_thread(monitor, timeout=3.0)
         _THREAD = None
         _MONITOR = None
 
 
 def status_servidor() -> dict:
     config = carregar_config()
+    metricas = None
+    if _SERVIDOR is not None and getattr(_SERVIDOR, "observabilidade", None) is not None:
+        metricas = _SERVIDOR.observabilidade.snapshot()
     return {
         "ativo": bool(_SERVIDOR is not None and _THREAD is not None and _THREAD.is_alive()),
         "habilitado": bool(config.habilitado),
@@ -106,6 +107,7 @@ def status_servidor() -> dict:
         "tls": bool(config.tls),
         "porta": int(config.porta),
         "erro": _ERRO,
+        "observabilidade": metricas,
     }
 
 

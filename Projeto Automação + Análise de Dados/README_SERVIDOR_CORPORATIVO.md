@@ -1,4 +1,4 @@
-# Servidor Corporativo · V9.1
+# Servidor Corporativo · V10.1.1
 
 O `DataIntelligenceServer.exe` é a autoridade única das estações Central e Cliente.
 Ele mantém autenticação, sessões, correio, arquivos, backups, operações transacionais dos módulos e heartbeats do Agente TI.
@@ -61,7 +61,7 @@ O endpoint de heartbeat é:
 POST /api/v1/ti/agentes/heartbeat
 ```
 
-Não é necessário abrir a porta 8765 na Central quando ela está conectada ao servidor V9.1.
+Não é necessário abrir a porta 8765 na Central quando ela está conectada ao servidor V10.1.1.
 
 ## Persistência
 
@@ -71,7 +71,7 @@ Dados do servidor no Windows:
 C:\ProgramData\DataIntelligence\Server
 ```
 
-Central/Cliente possuem apenas cache local de identidade/navegação em:
+Central/Cliente não possuem banco corporativo local. A configuração abaixo contém apenas papel da estação e endereço do servidor:
 
 ```text
 C:\ProgramData\DataIntelligence\Platform

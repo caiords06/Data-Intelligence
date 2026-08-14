@@ -3,7 +3,7 @@
 import tkinter as tk
 
 from auth.sessao import SESSAO
-from enterprise.central import busca_universal
+from services.central import busca_universal
 from interface.componentes import preparar_janela_secundaria
 from interface.tema import CORES
 
@@ -26,14 +26,14 @@ class JanelaBuscaUniversal:
         tk.Label(
             self.janela,
             text="Busca universal",
-            font=("Segoe UI", 20, "bold"),
+            font=("Inter", 20, "bold"),
             fg=CORES["text"],
             bg=CORES["bg"],
         ).pack(anchor="w", padx=28, pady=(24, 4))
         tk.Label(
             self.janela,
             text="Pesquise colaboradores, itens, lançamentos, chamados, contratos e oportunidades.",
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text_sec"],
             bg=CORES["bg"],
         ).pack(anchor="w", padx=28, pady=(0, 14))
@@ -44,7 +44,7 @@ class JanelaBuscaUniversal:
         entry = tk.Entry(
             moldura,
             textvariable=self.termo,
-            font=("Segoe UI", 12),
+            font=("Inter", 12),
             bg=CORES["input"],
             fg=CORES["text"],
             insertbackground=CORES["primary"],
@@ -64,7 +64,7 @@ class JanelaBuscaUniversal:
             selectforeground="#FFFFFF",
             relief="flat",
             bd=0,
-            font=("Segoe UI", 10),
+            font=("Inter", 10),
             activestyle="none",
         )
         self.lista.pack(fill="both", expand=True, padx=28, pady=(14, 8))
@@ -73,7 +73,7 @@ class JanelaBuscaUniversal:
         self.status = tk.Label(
             self.janela,
             text="Digite ao menos dois caracteres.",
-            font=("Segoe UI", 8),
+            font=("Inter", 8),
             fg=CORES["text_muted"],
             bg=CORES["bg"],
         )

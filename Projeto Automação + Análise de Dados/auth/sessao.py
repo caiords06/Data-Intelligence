@@ -20,6 +20,20 @@ class Sessao:
         self.empresa_id = None
         self.filial_id = None
         self.empresas_criadas_sessao = set()
+        try:
+            from core.nodo import usa_servidor_remoto
+            if usa_servidor_remoto():
+                from enterprise.servidor_cliente import contexto_memoria
+                bootstrap = contexto_memoria()
+                empresa = dict(bootstrap.get("empresa") or {})
+                if empresa.get("id") is not None:
+                    self.empresa_id = int(empresa["id"])
+                if bootstrap.get("filial_id") is not None:
+                    self.filial_id = int(bootstrap["filial_id"])
+        except (RuntimeError, ValueError, TypeError):
+            # A sessão permanece em memória; a próxima operação remota falhará
+            # explicitamente se a configuração do servidor estiver inválida.
+            pass
 
     def definir_contexto_empresarial(self, empresa_id, filial_id=None):
         self.empresa_id = int(empresa_id) if empresa_id is not None else None
@@ -63,7 +77,7 @@ class Sessao:
         return self.usuario is not None
 
     def validar(self) -> bool:
-        """Confirma se a sessão em memória continua válida no banco local.
+        """Confirma se a sessão em memória continua válida na autoridade configurada.
 
         Alterações de senha, perfil ou status incrementam ``sessao_epoch``.
         Quando o epoch diverge, a sessão é encerrada imediatamente para que
@@ -72,10 +86,37 @@ class Sessao:
         if self.usuario is None:
             return False
         try:
-            from auth.banco import buscar_usuario_por_id
+            from core.nodo import usa_servidor_remoto
+            if usa_servidor_remoto():
+                from enterprise.servidor_cliente import validar_sessao_remota
+                payload = validar_sessao_remota()
+                remoto = dict(payload.get("usuario") or {})
+                if not remoto or not bool(remoto.get("ativo", True)):
+                    self.encerrar()
+                    return False
+                # O servidor é a autoridade do epoch/perfil; mantenha a sessão
+                # em memória alinhada ao bootstrap mais recente.
+                self.usuario.update(remoto)
+                empresa = dict(payload.get("empresa") or {})
+                if empresa.get("id") is not None:
+                    self.empresa_id = int(empresa["id"])
+                self.filial_id = (
+                    int(payload["filial_id"])
+                    if payload.get("filial_id") is not None else None
+                )
+                return True
 
+            from auth.banco import buscar_usuario_por_id
             registro = buscar_usuario_por_id(int(self.usuario["id"]))
+        except PermissionError:
+            self.encerrar()
+            return False
         except (KeyError, TypeError, ValueError):
+            # Indisponibilidade temporária do servidor não cria fallback local.
+            # A sessão permanece em memória; qualquer
+            # operação remota continuará falhando de forma explícita.
+            if self.usuario is not None:
+                return True
             self.encerrar()
             return False
         if registro is None or not bool(registro["ativo"]):

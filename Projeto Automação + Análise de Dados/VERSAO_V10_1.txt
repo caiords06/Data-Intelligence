@@ -1,0 +1,4 @@
+Data Intelligence Enterprise Platform
+Versão 10.1.0 (V10.1)
+Python de release: 3.14
+PostgreSQL + Server First

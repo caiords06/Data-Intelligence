@@ -7,6 +7,7 @@ import pandas as pd
 
 from auth import banco
 from auth.autenticacao import criar_admin_inicial, criar_usuario
+from auth.sessao import SESSAO
 from configuracoes import preferencias
 from historico.repositorio import (
     excluir_analise,
@@ -17,32 +18,36 @@ from historico.repositorio import (
 
 
 class HistoricoPreferenciasTests(unittest.TestCase):
-    def test_preferencias_sao_normalizadas_e_persistidas(self):
+    def test_preferencias_sao_normalizadas_e_persistidas_no_banco(self):
         with tempfile.TemporaryDirectory() as pasta:
             destino = Path(pasta)
-            with patch.object(preferencias, "STORAGE_DIR", destino), patch.object(
-                preferencias, "PREFERENCIAS_PATH", destino / "preferencias.json"
+            with patch.object(banco, "DB_PATH", destino / "teste.db"), patch.object(
+                banco, "STORAGE_DIR", destino
             ):
-                salvas = preferencias.salvar_preferencias(
-                    {
-                        "atraso_minimo_segundos": 99,
-                        "categoria_padrao": "financeiro",
-                        "tempo_sessao_minutos": 1,
-                    }
-                )
-                self.assertEqual(salvas["atraso_minimo_segundos"], 15)
-                self.assertEqual(salvas["tempo_sessao_minutos"], 5)
-                self.assertEqual(
-                    preferencias.carregar_preferencias()["categoria_padrao"],
-                    "financeiro",
-                )
-                inseguras = preferencias.salvar_preferencias(
-                    {"url_validacao": "file:///C:/dados/privados.txt"}
-                )
-                self.assertEqual(
-                    inseguras["url_validacao"],
-                    "https://example.com",
-                )
+                banco.inicializar_banco()
+                admin = criar_admin_inicial("Administrador", "admin", "SenhaAdmin#123")
+                SESSAO.iniciar(admin)
+                try:
+                    salvas = preferencias.salvar_preferencias(
+                        {
+                            "atraso_minimo_segundos": 99,
+                            "categoria_padrao": "financeiro",
+                            "tempo_sessao_minutos": 1,
+                        }
+                    )
+                    self.assertEqual(salvas["atraso_minimo_segundos"], 15)
+                    self.assertEqual(salvas["tempo_sessao_minutos"], 5)
+                    self.assertEqual(
+                        preferencias.carregar_preferencias()["categoria_padrao"],
+                        "financeiro",
+                    )
+                    inseguras = preferencias.salvar_preferencias(
+                        {"url_validacao": "file:///C:/dados/privados.txt"}
+                    )
+                    self.assertEqual(inseguras["url_validacao"], "https://example.com")
+                    self.assertFalse((destino / "preferencias.json").exists())
+                finally:
+                    SESSAO.encerrar()
 
     def test_historico_respeita_o_dono_e_nao_grava_caminho_completo(self):
         with tempfile.TemporaryDirectory() as pasta:

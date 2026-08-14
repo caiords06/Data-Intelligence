@@ -1,0 +1,11 @@
+Data Intelligence Enterprise Platform
+Versão 10.0.0 (V10)
+
+V10 — Instalador Windows Unificado
+Perfis disponíveis:
+- PC SERVIDOR + PC CENTRAL
+- PC CENTRAL
+- PC SERVIDOR
+- PC CLIENTE + AGENTE
+- PC CLIENTE
+- PC AGENTE

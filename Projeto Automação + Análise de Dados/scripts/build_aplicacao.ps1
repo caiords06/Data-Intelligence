@@ -6,7 +6,7 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
 python scripts\verificar_python_release.py
-Assert-NativeSuccess "Python incompatível com o release V9.3."
+Assert-NativeSuccess "Python incompatível com o release V10."
 python -m pip install -r requirements.lock.txt
 Assert-NativeSuccess "Falha ao instalar dependências homologadas."
 python -m pip install -r requirements-build.lock.txt

@@ -4,8 +4,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from auth.sessao import SESSAO
-from enterprise.catalogo import MODULOS
-from enterprise.central import listar_notificacoes, marcar_notificacao_lida
+from services.catalogo import MODULOS
+from services.central import listar_notificacoes, marcar_notificacao_lida
 from interface.componentes import (
     AreaRolavel, criar_botao, criar_cabecalho, criar_card,
     criar_estado_vazio, criar_sidebar,
@@ -110,7 +110,7 @@ class TelaNotificacoes:
         self.status = tk.Label(
             rodape,
             text="",
-            font=("Segoe UI", 9),
+            font=("Inter", 9),
             fg=CORES["text_sec"],
             bg=CORES["bg"],
         )

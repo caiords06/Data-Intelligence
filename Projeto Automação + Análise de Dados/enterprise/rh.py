@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import shutil
 from datetime import date, datetime
@@ -19,7 +20,7 @@ from uuid import uuid4
 import pandas as pd
 
 from auth import banco as banco_auth
-from auth.banco import conectar
+from enterprise.repositories import conectar
 from enterprise.contexto import obter_escopo_ator, tem_permissao
 
 
@@ -60,6 +61,23 @@ SECOES_RECURSOS = {
     "carreira": "rh_pdis",
     "documentos": "rh_documentos",
     "solicitacoes": "rh_solicitacoes",
+}
+
+_ESTADOS_REMOCAO_RH = {
+    "colaboradores": ("status", "Removido", "Ativo"),
+    "admissoes": ("status", "Removida", "Em andamento"),
+    "desligamentos": ("status", "Removido", "Em andamento"),
+    "ponto": ("status", "Removido", "Registrado"),
+    "ferias": ("status", "Removido", "Solicitado"),
+    "beneficios": ("status", "Removido", "Ativo"),
+    "folha": ("status", "Removida", "Aberta"),
+    "cargos": ("ativo", 0, 1),
+    "recrutamento": ("status", "Removida", "Rascunho"),
+    "desempenho": ("status", "Removida", "Planejada"),
+    "treinamentos": ("ativo", 0, 1),
+    "carreira": ("status", "Removido", "Ativo"),
+    "documentos": ("status", "Removido", "Ativo"),
+    "solicitacoes": ("status", "Removida", "Aberta"),
 }
 
 
@@ -287,7 +305,7 @@ def listar_catalogos(ator: dict) -> dict:
             "cargos": consulta("SELECT * FROM rh_cargos WHERE empresa_id=? AND ativo=1 ORDER BY titulo"),
             "beneficios": consulta("SELECT * FROM rh_beneficios WHERE empresa_id=? AND ativo=1 ORDER BY nome"),
             "colaboradores": consulta(
-                "SELECT id, matricula, nome_completo FROM rh_colaboradores WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) AND status<>'Desligado' ORDER BY nome_completo",
+                "SELECT id, matricula, nome_completo FROM rh_colaboradores WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) AND status NOT IN ('Desligado','Removido') ORDER BY nome_completo",
                 (empresa_id, filial_id, filial_id),
             ),
         }
@@ -439,7 +457,9 @@ def listar_colaboradores(ator: dict, *, pesquisa="", status="Todos", pagina=1, p
         filtros.append("(c.nome_completo LIKE ? OR c.matricula LIKE ? OR c.cargo_texto LIKE ?)")
         termo = f"%{_texto(pesquisa, 120)}%"
         parametros += [termo, termo, termo]
-    if status != "Todos":
+    if status == "Todos":
+        filtros.append("c.status<>'Removido'")
+    else:
         filtros.append("c.status=?")
         parametros.append(status)
     limite = max(1, min(int(por_pagina), 200))
@@ -465,7 +485,13 @@ def listar_colaboradores(ator: dict, *, pesquisa="", status="Todos", pagina=1, p
     return {"registros": registros, "total": total, "pagina": max(1, int(pagina)), "por_pagina": limite}
 
 
-def obter_colaborador(colaborador_id: int, ator: dict) -> dict:
+def obter_colaborador(
+    colaborador_id: int,
+    ator: dict,
+    *,
+    finalidade: str = "Gestão do colaborador",
+    request_id: str | None = None,
+) -> dict:
     exigir_acao(ator, "visualizar", colaborador_id)
     empresa_id, filial_id = obter_escopo_ator(ator)
     with conectar() as conexao:
@@ -491,12 +517,28 @@ def obter_colaborador(colaborador_id: int, ator: dict) -> dict:
             WHERE cb.colaborador_id=? ORDER BY cb.inicio DESC""", (int(colaborador_id),)).fetchall()]
         resultado["documentos"] = [dict(x) for x in conexao.execute("SELECT * FROM rh_documentos WHERE colaborador_id=? AND status='Ativo' ORDER BY criado_em DESC", (int(colaborador_id),)).fetchall()]
         resultado["equipamentos"] = [dict(x) for x in conexao.execute("SELECT * FROM rh_equipamentos WHERE colaborador_id=? ORDER BY entregue_em DESC", (int(colaborador_id),)).fetchall()]
+    campos_lidos: list[str] = []
     if not tem_permissao_rh(ator, "visualizar_remuneracao", colaborador_id):
         for campo in ("salario_centavos", "banco", "agencia", "conta", "chave_pix"):
             resultado[campo] = None
+    else:
+        campos_lidos.extend(("salario_centavos", "banco", "agencia", "conta", "chave_pix"))
     if not tem_permissao_rh(ator, "visualizar_dados_pessoais", colaborador_id):
         for campo in ("cpf", "rg", "nascimento", "endereco", "telefone", "email_pessoal", "contato_emergencia"):
             resultado[campo] = None
+        resultado["dependentes"] = []
+        resultado["documentos"] = []
+    else:
+        campos_lidos.extend((
+            "cpf", "rg", "nascimento", "endereco", "telefone", "email_pessoal",
+            "contato_emergencia", "dependentes", "documentos",
+        ))
+    if campos_lidos:
+        from enterprise.privacidade import registrar_leitura_sensivel
+        registrar_leitura_sensivel(
+            ator=ator, modulo="RH", entidade="colaborador", entidade_id=int(colaborador_id),
+            campos=campos_lidos, finalidade=finalidade, request_id=request_id,
+        )
     return resultado
 
 
@@ -542,6 +584,46 @@ def atualizar_colaborador(colaborador_id: int, dados: dict, ator: dict) -> None:
         _evento(conexao, ator, "colaborador_atualizado", "rh_colaboradores", colaborador_id, antes, alteracoes)
 
 
+def alterar_estado_registro_rh(secao: str, registro_id: int, remover: bool, ator: dict) -> None:
+    """Move um item de RH para a lixeira ou o restaura, sempre com auditoria."""
+    exigir_acao(ator, "editar_colaborador")
+    secao = str(secao or "").strip().lower()
+    if secao == "movimentacoes":
+        raise ValueError("Movimentações profissionais são evidências de auditoria e não podem ser removidas.")
+    configuracao = _ESTADOS_REMOCAO_RH.get(secao)
+    tabela = SECOES_RECURSOS.get(secao)
+    if configuracao is None or tabela is None:
+        raise ValueError("Esta seção ainda não possui remoção controlada.")
+    empresa_id, filial_id = obter_escopo_ator(ator)
+    campo, valor_removido, valor_restaurado = configuracao
+    with conectar() as conexao:
+        if secao == "beneficios":
+            atual = conexao.execute(
+                """SELECT cb.* FROM rh_colaborador_beneficios cb
+                   JOIN rh_colaboradores c ON c.id=cb.colaborador_id
+                   WHERE cb.id=? AND c.empresa_id=? AND (c.filial_id=? OR ? IS NULL)""",
+                (int(registro_id), empresa_id, filial_id, filial_id),
+            ).fetchone()
+        elif secao == "carreira":
+            atual = conexao.execute(
+                """SELECT p.* FROM rh_pdis p JOIN rh_colaboradores c ON c.id=p.colaborador_id
+                   WHERE p.id=? AND c.empresa_id=? AND (c.filial_id=? OR ? IS NULL)""",
+                (int(registro_id), empresa_id, filial_id, filial_id),
+            ).fetchone()
+        else:
+            atual = _registro_no_escopo(conexao, tabela, int(registro_id), empresa_id, filial_id)
+        if atual is None:
+            raise ValueError("Registro de RH não encontrado no contexto atual.")
+        novo = valor_removido if remover else valor_restaurado
+        if atual[campo] == novo:
+            return
+        conexao.execute(f"UPDATE {tabela} SET {campo}=? WHERE id=?", (novo, int(registro_id)))
+        _evento(
+            conexao, ator, "registro_removido" if remover else "registro_restaurado",
+            tabela, int(registro_id), antes={campo: atual[campo]}, depois={campo: novo},
+        )
+
+
 def adicionar_dependente(colaborador_id: int, dados: dict, ator: dict) -> int:
     exigir_acao(ator, "editar_colaborador", colaborador_id)
     empresa_id, filial_id = obter_escopo_ator(ator)
@@ -574,6 +656,9 @@ def iniciar_admissao(dados: dict, ator: dict) -> int:
         ):
             _tarefa(conexao, ator, modulo, titulo, descricao, "rh_admissoes", admissao_id, "Alta" if modulo == "rh" else "Média")
         _notificar(conexao, ator, "Nova admissão iniciada", f"O processo de {nome} gerou tarefas integradas.", "info", recurso="rh_admissoes", recurso_id=admissao_id)
+    # V10.4.1: registra o fluxo transversal em um objeto único, além das tarefas legadas.
+    from enterprise.orquestracao import criar_fluxo_admissao
+    criar_fluxo_admissao(colaborador_id, ator)
     return admissao_id
 
 
@@ -637,6 +722,9 @@ def iniciar_desligamento(colaborador_id: int, dados: dict, ator: dict) -> int:
         ):
             _tarefa(conexao, ator, modulo, titulo, descricao, "rh_desligamentos", desligamento_id, "Alta")
         _evento(conexao, ator, "desligamento_iniciado", "rh_desligamentos", desligamento_id, depois={"colaborador": nome, "data": data_prevista})
+    # V10.4.1: acompanha revogação de acessos, devolução de ativos e pendências financeiras.
+    from enterprise.orquestracao import criar_fluxo_desligamento
+    criar_fluxo_desligamento(int(colaborador_id), ator)
     return desligamento_id
 
 
@@ -862,7 +950,7 @@ def gerar_contracheque(folha_id: int, colaborador_id: int, ator: dict) -> str:
         from enterprise.servidor_cliente import espelhar_exportacao
         espelhar_exportacao(caminho, modulo="rh", categoria="contracheque")
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Não foi possível espelhar contracheque no servidor")
     return str(caminho)
 
 
@@ -1048,7 +1136,7 @@ def registrar_documento(colaborador_id: int | None, dados: dict, caminho_origem:
         from enterprise.servidor_cliente import espelhar_exportacao
         espelhar_exportacao(destino, modulo="rh", categoria="documento")
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Não foi possível espelhar documento RH no servidor")
     return identificador
 
 
@@ -1094,7 +1182,7 @@ def criar_solicitacao(dados: dict, ator: dict) -> int:
     return identificador
 
 
-def listar_secao(secao: str, ator: dict, *, limite=500) -> list[dict]:
+def listar_secao(secao: str, ator: dict, *, limite=500, estado="Ativos") -> list[dict]:
     exigir_acao(ator, "visualizar")
     tabela = SECOES_RECURSOS.get(secao)
     if tabela is None: raise ValueError("Seção de RH inválida.")
@@ -1111,7 +1199,7 @@ def listar_secao(secao: str, ator: dict, *, limite=500) -> list[dict]:
         "cargos": "SELECT id, codigo, titulo, nivel, salario_minimo_centavos, salario_referencia_centavos, salario_maximo_centavos, ativo FROM rh_cargos WHERE empresa_id=? ORDER BY titulo",
         "recrutamento": "SELECT v.id, v.titulo, v.quantidade, v.status, v.motivo, COUNT(c.id) candidatos FROM rh_vagas v LEFT JOIN rh_candidatos c ON c.vaga_id=v.id WHERE v.empresa_id=? AND (v.filial_id=? OR ? IS NULL) GROUP BY v.id ORDER BY v.id DESC",
         "desempenho": "SELECT a.id, c.nome_completo, a.ciclo, a.tipo, a.nota, a.status, a.realizada_em FROM rh_avaliacoes a JOIN rh_colaboradores c ON c.id=a.colaborador_id WHERE a.empresa_id=? AND (a.filial_id=? OR ? IS NULL) ORDER BY a.id DESC",
-        "treinamentos": "SELECT t.id, t.titulo, t.tipo, t.carga_horaria, t.obrigatorio, t.validade_meses, COUNT(i.id) inscritos FROM rh_treinamentos t LEFT JOIN rh_inscricoes_treinamento i ON i.treinamento_id=t.id WHERE t.empresa_id=? GROUP BY t.id ORDER BY t.titulo",
+        "treinamentos": "SELECT t.id, t.titulo, t.tipo, t.carga_horaria, t.obrigatorio, t.validade_meses, t.ativo, COUNT(i.id) inscritos FROM rh_treinamentos t LEFT JOIN rh_inscricoes_treinamento i ON i.treinamento_id=t.id WHERE t.empresa_id=? GROUP BY t.id ORDER BY t.titulo",
         "carreira": "SELECT p.id, c.nome_completo, p.titulo, p.inicio, p.prazo, p.progresso, p.status FROM rh_pdis p JOIN rh_colaboradores c ON c.id=p.colaborador_id WHERE c.empresa_id=? AND (c.filial_id=? OR ? IS NULL) ORDER BY p.id DESC",
         "documentos": "SELECT d.id, COALESCE(c.nome_completo, 'Corporativo') vinculo, d.categoria, d.titulo, d.versao, d.classificacao, d.validade, d.assinatura_status, d.status FROM rh_documentos d LEFT JOIN rh_colaboradores c ON c.id=d.colaborador_id WHERE d.empresa_id=? AND (d.filial_id=? OR ? IS NULL) ORDER BY d.id DESC",
         "solicitacoes": "SELECT s.id, c.nome_completo, s.tipo, s.titulo, s.status, s.resposta, s.criado_em FROM rh_solicitacoes s JOIN rh_colaboradores c ON c.id=s.colaborador_id WHERE s.empresa_id=? AND (s.filial_id=? OR ? IS NULL) ORDER BY s.id DESC",
@@ -1123,6 +1211,14 @@ def listar_secao(secao: str, ator: dict, *, limite=500) -> list[dict]:
     with conectar() as conexao:
         linhas = conexao.execute(sql, params).fetchall()
     registros = [dict(x) for x in linhas]
+    configuracao_remocao = _ESTADOS_REMOCAO_RH.get(secao)
+    if configuracao_remocao:
+        campo, valor_removido, _valor_restaurado = configuracao_remocao
+        mostrar_lixeira = str(estado or "Ativos").strip().lower() == "lixeira"
+        registros = [
+            item for item in registros
+            if (item.get(campo) == valor_removido) == mostrar_lixeira
+        ]
     if secao in {"colaboradores", "folha", "beneficios", "cargos"} and not tem_permissao_rh(ator, "visualizar_remuneracao"):
         for registro in registros:
             for campo in tuple(registro):
@@ -1142,11 +1238,12 @@ def resumo_rh(ator: dict) -> dict:
             SUM(CASE WHEN status='Em desligamento' THEN 1 ELSE 0 END) desligamentos,
             COUNT(DISTINCT departamento_id) departamentos,
             COALESCE(SUM(CASE WHEN status='Ativo' THEN salario_centavos ELSE 0 END), 0) folha_base
-            FROM rh_colaboradores WHERE empresa_id=? AND (filial_id=? OR ? IS NULL)""", (empresa_id, filial_id, filial_id)).fetchone()
+            FROM rh_colaboradores WHERE empresa_id=? AND (filial_id=? OR ? IS NULL)
+              AND status<>'Removido'""", (empresa_id, filial_id, filial_id)).fetchone()
         ferias = int(conexao.execute("SELECT COUNT(*) total FROM rh_ferias_ausencias WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) AND status='Solicitado'", (empresa_id, filial_id, filial_id)).fetchone()["total"])
         docs = int(conexao.execute("SELECT COUNT(*) total FROM rh_documentos WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) AND validade IS NOT NULL AND validade<=date('now','+30 day') AND status='Ativo'", (empresa_id, filial_id, filial_id)).fetchone()["total"])
         tarefas = int(conexao.execute("SELECT COUNT(*) total FROM tarefas WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) AND modulo='rh' AND status NOT IN ('Concluída','Cancelada')", (empresa_id, filial_id, filial_id)).fetchone()["total"])
-        jornada = [dict(x) for x in conexao.execute("SELECT etapa_jornada etapa, COUNT(*) total FROM rh_colaboradores WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) GROUP BY etapa_jornada ORDER BY etapa_jornada", (empresa_id, filial_id, filial_id)).fetchall()]
+        jornada = [dict(x) for x in conexao.execute("SELECT etapa_jornada etapa, COUNT(*) total FROM rh_colaboradores WHERE empresa_id=? AND (filial_id=? OR ? IS NULL) AND status<>'Removido' GROUP BY etapa_jornada ORDER BY etapa_jornada", (empresa_id, filial_id, filial_id)).fetchall()]
     resultado = dict(linha); resultado.update({"ferias_pendentes": ferias, "documentos_vencendo": docs, "tarefas_pendentes": tarefas, "jornada": jornada})
     if not tem_permissao_rh(ator, "visualizar_remuneracao"):
         resultado["folha_base"] = None
@@ -1179,15 +1276,30 @@ def exportar_dataframe_rh(ator: dict) -> pd.DataFrame:
         params.extend((int(ator["id"]), empresa_id, int(ator["id"])))
     with conectar() as conexao:
         _sincronizar_legado(conexao, empresa_id, filial_id)
-        df = pd.read_sql_query(f"""SELECT c.id, c.matricula, c.nome_completo nome,
+        # ``ConexaoCompat`` protege o restante da aplicação de detalhes do
+        # driver e, por projeto, não expõe ``cursor()``. O pandas tenta acessar
+        # esse método quando recebe uma conexão que não seja sqlite3/SQLAlchemy,
+        # fazendo a exportação falhar somente no PostgreSQL. Execute pelo
+        # contrato portátil do adapter e entregue ao pandas dados já
+        # materializados.
+        linhas = conexao.execute(f"""SELECT c.id, c.matricula, c.nome_completo nome,
             c.cargo_texto cargo, d.nome departamento, f.nome filial,
             c.tipo_contrato, c.modalidade, c.admissao, c.status,
             c.etapa_jornada, c.salario_centavos
             FROM rh_colaboradores c
             LEFT JOIN departamentos d ON d.id=c.departamento_id
             LEFT JOIN filiais f ON f.id=c.filial_id
-            WHERE c.empresa_id=? AND (c.filial_id=? OR ? IS NULL) {restricao}
-            ORDER BY c.nome_completo""", conexao, params=params)
+            WHERE c.empresa_id=? AND (c.filial_id=? OR ? IS NULL)
+              AND c.status<>'Removido' {restricao}
+            ORDER BY c.nome_completo""", tuple(params)).fetchall()
+        df = pd.DataFrame([dict(linha) for linha in linhas])
+        # Uma consulta vazia ainda precisa preservar o schema do relatório.
+        if df.empty:
+            df = pd.DataFrame(columns=(
+                "id", "matricula", "nome", "cargo", "departamento", "filial",
+                "tipo_contrato", "modalidade", "admissao", "status",
+                "etapa_jornada", "salario_centavos",
+            ))
     if not tem_permissao_rh(ator, "visualizar_remuneracao") and "salario_centavos" in df:
         df = df.drop(columns=["salario_centavos"])
     return df
@@ -1235,7 +1347,7 @@ def gerar_relatorio_rh(tipo: str, formato: str, destino: str | Path, ator: dict)
         from enterprise.servidor_cliente import espelhar_exportacao
         espelhar_exportacao(destino, modulo="rh", categoria="relatorio")
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Não foi possível espelhar relatório RH no servidor")
     return str(destino)
 
 
@@ -1246,6 +1358,18 @@ def agendar_relatorio(dados: dict, ator: dict) -> int:
         cursor = conexao.execute("INSERT INTO rh_relatorios_agendados (empresa_id, filial_id, tipo, formato, frequencia, destinatarios, filtros_json, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (empresa_id, filial_id, _texto(dados.get("tipo") or "Colaboradores", 80), _texto(dados.get("formato") or "PDF", 10), _texto(dados.get("frequencia") or "Mensal", 40), _texto(dados.get("destinatarios"), 1000) or None, json.dumps(dados.get("filtros") or {}, ensure_ascii=False), int(ator["id"])))
         identificador = int(cursor.lastrowid); _evento(conexao, ator, "relatorio_agendado", "rh_relatorios_agendados", identificador)
+    from enterprise.automacao_motor import registrar_agendamento
+    registrar_agendamento(
+        modulo="rh", referencia_tipo="rh_relatorios_agendados", referencia_id=identificador,
+        handler="relatorio.gerar",
+        payload={
+            "modulo": "rh", "tipo": dados.get("tipo") or "Colaboradores",
+            "formato": dados.get("formato") or "PDF", "filtros": dados.get("filtros") or {},
+            "destinatarios": dados.get("destinatarios") or "",
+        },
+        frequencia=dados.get("frequencia") or "Mensal",
+        proxima_execucao=dados.get("proxima_execucao"), ator=ator,
+    )
     return identificador
 
 

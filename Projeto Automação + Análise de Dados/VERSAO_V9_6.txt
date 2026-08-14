@@ -1,0 +1,5 @@
+Data Intelligence Enterprise Platform
+Versão: 9.6.0
+Interface: V9.6
+Linha: Refatoração da Camada Visual + Componentização
+Python oficial de release: 3.14
